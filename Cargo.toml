@@ -1,0 +1,25 @@
+[package]
+name = "lamino_pal_core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["python"]
+# The Python extension. maturin finds pyo3 only through default features;
+# `--no-default-features` links no libpython, so nextest runs the Rust modules.
+python = ["dep:pyo3", "dep:numpy"]
+cuda = ["tomoxide/cuda"]
+
+[dependencies]
+tomoxide = { path = "lib/tomoxide/crates/tomoxide" }
+pyo3 = { version = "0.27", features = ["abi3-py312"], optional = true }
+numpy = { version = "0.27", optional = true }
+
+[workspace]
+# Path dependencies under the root would join this workspace; tomoxide has its own.
+exclude = ["lib/tomoxide"]

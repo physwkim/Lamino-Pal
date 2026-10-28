@@ -1,0 +1,21 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
+[project]
+name = "lamino-pal"
+version = "0.1.0"
+description = "BL7C laminography reconstruction GUI and MCP server on tomoxide"
+requires-python = ">=3.12"
+dependencies = ["numpy", "h5py", "pydantic>=2", "tomli-w"]
+
+[tool.maturin]
+python-source = "python"
+bindings = "pyo3"
+module-name = "lamino_pal._core"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# napari's pytest plugins import napari into every run.
+addopts = "-p no:napari -p no:npe2 -p no:napari-plugin-engine"
