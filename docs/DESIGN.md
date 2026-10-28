@@ -40,9 +40,9 @@ tomoxide `docs/LAMINOGRAPHY_ALIGNMENT.md`.
 | 원본 projection 확인 | `raw.frame` | instant | tomoxide `read_h5_frame` |
 | 360° 평균 projection | `raw.mean_projection` | interactive | tomoxide `mean_projection` |
 | ALIGNMENT §5 각도 범위 확인 | `raw.range_check` | instant | Python |
-| proj0 vs proj@360 drift (−6 px) | `raw.drift` | interactive | tomoxide (T3) |
-| 인접 projection flow tilt (τ = 19.4 ± 1.5°) | `raw.tilt_flow` | interactive | tomoxide (T3) |
-| `ring_center.py`, `align --rings_only` | `align.rings` | interactive | tomoxide `find_center_rings` |
+| proj0 vs proj@360 drift (−6 px) | `raw.drift` | interactive | tomoxide `register_shift` |
+| 인접 projection flow tilt (τ = 19.4 ± 1.5°) | `raw.tilt_flow` | interactive | tomoxide `estimate_tilt_flow` |
+| `ring_center.py`, `align --rings_only` | `align.rings` | interactive | tomoxide `find_center_rings_from_mean` |
 | `align` center sweep | `align.center_sweep` | interactive | tomoxide align (T1) |
 | `align --tilt_width`, `compare_tilts.py` | `align.tilt_scan` | job | tomoxide `lamino_tilt_scan` |
 | `compare_centers.py` | `align.center_compare` | job | tomoxide recon + Python montage |
@@ -50,9 +50,9 @@ tomoxide `docs/LAMINOGRAPHY_ALIGNMENT.md`.
 | 알고리즘 비교(parzen/shepp/ramp/Paganin/vo-all) | `recon.compare` | job | tomoxide + Python CNR |
 | even/odd projection split | `recon.split` | job | tomoxide |
 | `recon`, `fly/run_finals.sh` | `recon.run` | job | `tomoxide` CLI subprocess |
-| `inspect_volume.py` focus-by-z | `volume.focus_by_z` | interactive | tomoxide (T3) |
+| `inspect_volume.py` focus-by-z | `volume.focus_by_z` | interactive | tomoxide `focus_by_z` |
 | slice/ortho 보기 | `volume.slice`, `volume.ortho` | instant | h5py lazy |
-| valid FOV | `volume.valid_fov` | instant | tomoxide (T3) |
+| valid FOV | `volume.valid_fov` | instant | tomoxide `Geometry::valid_fov` |
 | `export_tiff.py` | `export.tiff16` | job | core |
 | `export_bin.py` | `export.bin` | job | core |
 | `view3d.py` MIP | `export.mip` + GUI 3D 탭 | job | core |
@@ -88,12 +88,21 @@ divker2d; ARCHITECTURE.md §4.1과 모순). tomoxide에서 고치고 GUI는 뒤�
 tomocupy 출력 방향이 달라지는 semantic change라 sign-off가 필요하고, 기존
 `final_*fourierrec*` 볼륨과 방향이 달라진다.
 
-**T3 — 일반 커널 공개.** `estimate_tilt_flow(tomo, center) -> (tilt, sigma)`
-(`dz = −sinτ·(x−xc)·Δθ` 기울기 적합), `register_shift`(phase correlation; 지금은
-`find_center_pc` 내부), `focus_by_z(vol, disk_frac)`(`TiltFocus::focus_by_z`
-계산 분리), `valid_fov(geom, nx, nz) -> {r_max = min(c, W−c), |h| ≤ (H/2 −
-r_max·sin t)/cos t}`, `find_center_rings`에 row band 인자(ring_center.py의
-quarter-band 일관성 확인).
+**T3 — 일반 커널 공개** (branch `feat/lamino-kernels`).
+
+- `register_shift(reference, moving, backend, upsample) -> (dy, dx)`:
+  `find_center_pc` 내부 phase correlation.
+- `find_center_rings_from_mean(mean, backend)`: row band는 Python이 mean
+  projection에서 잘라 넘긴다(ring_center.py의 quarter-band 일관성 확인).
+  `find_center_rings`는 이것의 wrapper.
+- `focus_by_z(vol) -> Vec<f64>`: slice별 focus. `lamino_tilt_scan`,
+  `PreppedStack::center_sweep`과 공용.
+- `Geometry::valid_fov(depth) -> ValidFov { r_lateral, radius[z] }`,
+  `full_z()`: `r(h) = min(min(c, W−c), (H/2 − |h|·cos t)/sin t)`.
+- `estimate_tilt_flow(tomo, theta, backend) -> TiltFlow`: 인접 projection 쌍의
+  vertical flow를 `dz = sx·x + sz·y + c`로 적합해 tilt, roll, axis와 쌍별 값을
+  낸다. center는 입력이 아니라 출력. step1000_bin2: 19.40 ± 1.46°, axis
+  478.8 ± 74.8(Python 원본과 쌍마다 일치).
 
 ## 4. Rust core `lamino_pal_core`
 
