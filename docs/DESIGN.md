@@ -258,8 +258,9 @@ TXM-Pal 구조를 따른다: `gui/ui/main.ui`(Designer), worker thread →
 - 확인한 것(napari 0.6.6, silx 2.1.0, `QT_QPA_PLATFORM=offscreen`): PySide6와
   PyQt5 각각에서 한 `QApplication`에 `QtViewer` + silx `Plot1D` + napari dock을 함께
   만들고, image/shapes layer 추가, `ndisplay` 2↔3 전환, `dims` step 이동이
-  동작했다. offscreen에는 GL context가 없어서 실제 렌더링은 확인하지 못했다.
-  M3에서 실제 display로 확인한다.
+  동작했다. offscreen은 `QOpenGLWidget`을 지원하지 않으므로 실제 렌더링은 xcb에서
+  창에 `WA_DontShowOnScreen`을 걸어 GLX display(NVIDIA RTX 5000 Ada, GL 4.6)로
+  확인했다: 창을 띄우지 않고 GL로 그린다.
 - binding은 PySide6 하나로 고정한다(`QT_API=pyside6`, silx도 같은 binding을
   따른다).
 - 3D에는 bin-4 볼륨(545×512×512, float32 0.57 GB)을 만들어 올린다. 최종 볼륨인
@@ -485,8 +486,13 @@ skip이 아니라 실패로 처리한다.
 - GUI(`tests/test_gui.py`, `QT_QPA_PLATFORM=offscreen`, `QT_API=pyside6`): op마다
   action, None을 받는 필수 param, latest-wins, 상단 bar의 결정 출처와 다음 탭,
   instant op figure와 job 끝, Volume slider 한 번에 동기화 한 번과 3D 볼륨,
-  Export z 범위가 band를 따르고 손으로 고친 값은 유지. offscreen에는 GL이 없으므로
-  렌더링 결과(screenshot)는 실제 display가 있는 시험에서만 본다.
+  Export z 범위가 band를 따르고 손으로 고친 값은 유지. `QT_QPA_OFFSCREEN_NO_GLX=1`로
+  DISPLAY와 무관하게 GL 없이 돈다.
+- 렌더링(`tests/test_render.py`): Qt platform은 process에 하나이므로
+  `tests/gl_render.py`를 xcb의 별도 process로 돌린다(창은 `WA_DontShowOnScreen`).
+  layer가 든 model에 나중에 만든 canvas가 layer를 받으며 만든 canvas와 같은
+  pixel을 그린다(2D grid, 3D). DISPLAY에 GLX가 없으면 skip한다; 이 기계에서는
+  `DISPLAY=:0`.
 - pytest는 `lamino_pal`에서 나는 DeprecationWarning만 오류로 만든다. GUI
   stack(napari, npe2, app_model, matplotlib)이 import 때 내는 경고는 우리 것이
   아니어서 그 범위 밖이다.

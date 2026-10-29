@@ -1,5 +1,6 @@
 import math
 import os
+import time
 
 # Before anything can start a thread: GPU ops run on this process's one GPU.
 os.environ.setdefault("TOMOXIDE_CUDA_DEVICES", "0")
@@ -52,6 +53,17 @@ def band_at(z, depth_from, tilt_from, tilt_to, depth_to):
         return min(max(round(r / math.cos(math.radians(tilt_to)) + depth_to / 2), 0), depth_to - 1)
 
     return row(z[0]), row(z[1])
+
+
+def pump(app, seconds, until=None):
+    """Process events for `seconds`, or until `until()` holds; whether it did."""
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        app.processEvents()
+        if until is not None and until():
+            return True
+        time.sleep(0.02)
+    return until is None
 
 
 @pytest.fixture(scope="session")

@@ -1,19 +1,20 @@
-"""The GUI offscreen. There is no GL there, so what the canvases draw is not
-checked: only the layers, the steps and the widgets around them."""
+"""The GUI offscreen, without GL: the layers, the steps and the widgets
+around them. What the canvases draw is test_render.py's."""
 
 import os
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
+# Else offscreen draws through DISPLAY's GLX when it has one.
+os.environ["QT_QPA_OFFSCREEN_NO_GLX"] = "1"
 os.environ["QT_API"] = "pyside6"
 
 import threading
-import time
 
 import h5py
 import numpy as np
 import PySide6.QtCore  # noqa: F401  # silx takes the binding napari's qtpy is pinned to
 import pytest
-from conftest import band_at
+from conftest import band_at, pump
 from silx.gui import qt
 from test_recon import _scan
 
@@ -32,17 +33,6 @@ from lamino_pal.ops.align import Rival, SweepResult, Verdict
 @pytest.fixture(scope="module")
 def app():
     return qt.QApplication.instance() or qt.QApplication([])
-
-
-def pump(app, seconds, until=None):
-    """Process events for `seconds`, or until `until()` holds; whether it did."""
-    end = time.monotonic() + seconds
-    while time.monotonic() < end:
-        app.processEvents()
-        if until is not None and until():
-            return True
-        time.sleep(0.02)
-    return until is None
 
 
 @pytest.fixture
