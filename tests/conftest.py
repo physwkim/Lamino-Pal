@@ -1,3 +1,4 @@
+import math
 import os
 
 # Before anything can start a thread: GPU ops run on this process's one GPU.
@@ -40,6 +41,17 @@ def gpu_lock_dir(tmp_path, monkeypatch):
 
 
 DATA = Path(os.environ.get("LAMINO_PAL_DATA", "~/work/261003_Lamino_test")).expanduser()
+
+
+def band_at(z, depth_from, tilt_from, tilt_to, depth_to):
+    """tomoxide's SampleBand::at restated, so a test does not check the
+    binding against itself."""
+
+    def row(v):
+        r = (v - depth_from / 2) * math.cos(math.radians(tilt_from))
+        return min(max(round(r / math.cos(math.radians(tilt_to)) + depth_to / 2), 0), depth_to - 1)
+
+    return row(z[0]), row(z[1])
 
 
 @pytest.fixture(scope="session")

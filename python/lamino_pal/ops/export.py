@@ -16,7 +16,7 @@ import numpy as np
 import tifffile
 from pydantic import AfterValidator
 
-from lamino_pal import Refused, scans
+from lamino_pal import Refused, scans, units
 from lamino_pal.artifacts import save_h5, written
 from lamino_pal.dispatch import Context
 from lamino_pal.ops.registry import InPath, OptOutPath, OutputParams, Params, Result, op
@@ -56,13 +56,11 @@ def _bind_z(p: RangeParams, project: Project) -> RangeParams:
     zb = group.z_band if group else None
     if zb is None:
         raise Refused(f"scan {scan.tag} has no group z_band: pass z")
-    if (zb.bin, zb.tilt_deg) != (prov.get("bin"), prov.get("tilt_deg")):
-        raise Refused(
-            f"group {group.name}'s z_band was read at bin {zb.bin}, tilt {zb.tilt_deg}; {p.volume} is "
-            f"bin {prov.get('bin')}, tilt {prov.get('tilt_deg')}: pass z"
-        )
+    if "bin" not in prov or "tilt_deg" not in prov:
+        raise Refused(f"{p.volume} has no provenance naming its bin and tilt: pass z")
+    z0, z1 = units.band_for(zb, prov["bin"], prov["tilt_deg"], data(path).shape[0])
     # The band is inclusive.
-    return p.model_copy(update={"z": (zb.z[0], zb.z[1] + 1)})
+    return p.model_copy(update={"z": (z0, z1 + 1)})
 
 
 def _within(z: tuple[int, int], nz: int) -> tuple[int, int]:

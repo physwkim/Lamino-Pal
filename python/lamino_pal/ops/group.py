@@ -15,7 +15,7 @@ from lamino_pal.project import Decision, Method, ProjectFile, ZBand, is_under
 class DecideParams(Params):
     group: str
     field: Literal["center_px", "tilt_deg", "z_band"]
-    value: float | ZBand  # center_px full resolution; z_band rows of a bin-`bin` volume
+    value: float | ZBand  # center_px full resolution; z_band rows of the volume it was read from
     evidence: list[str] = Field(min_length=1)  # files under the work directory
     method: Method | None = None
     note: str = ""

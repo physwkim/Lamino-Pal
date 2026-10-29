@@ -41,16 +41,9 @@ def test_rings_refuse_a_half_turn(project):
 
 def test_sweep_refuses_a_z_band_of_another_binning(project):
     _scan(project, "s", [0, 90, 180, 270])
-    _group(project, ["s"], z_band=ZBand(z=(2, 6), bin=4, tilt_deg=20.0))
-    with pytest.raises(Refused, match="read at bin 4; scan s is bin 2"):
+    _group(project, ["s"], z_band=ZBand(z=(2, 6), bin=4, tilt_deg=20.0, depth=10))
+    with pytest.raises(Refused, match="read at bin 4; this volume is bin 2: pass the slices"):
         run(project, "align.center_sweep", tag="s", center_px=15.5)
-
-
-def test_sweep_refuses_a_z_band_read_at_another_tilt(project):
-    _scan(project, "s", [0, 90, 180, 270])
-    _group(project, ["s"], z_band=ZBand(z=(2, 6), bin=2, tilt_deg=20.0))
-    with pytest.raises(Refused, match="read at tilt 20.0; this sweep is at 18.0"):
-        run(project, "align.center_sweep", tag="s", center_px=15.5, tilt_deg=18.0)
 
 
 def test_tilt_scan_needs_a_decided_center(project, run_job):
@@ -93,7 +86,7 @@ def test_step1000_sweep_from_rings_is_ambiguous(golden_project):
 
 @pytest.mark.golden
 def test_tilt_scan_carries_the_band_to_each_tilt(mount, run_job):
-    _group(mount, ["step1000"], center_px=1008.5, z_band=ZBand(z=(420, 600), bin=2, tilt_deg=20.0))
+    _group(mount, ["step1000"], center_px=1008.5, z_band=ZBand(z=(420, 600), bin=2, tilt_deg=20.0, depth=1090))
     seen = []
     r = run_job(mount, "align.tilt_scan", {"tag": "step1000", "tilts_deg": [18.0, 20.0, 22.0]},
                 lambda frac, msg: seen.append(frac))
@@ -113,7 +106,7 @@ def test_tilt_scan_carries_the_band_to_each_tilt(mount, run_job):
 
 @pytest.mark.golden
 def test_center_compare_keeps_each_centers_best_slice(mount, run_job):
-    _group(mount, ["step1000"], center_px=1008.5, z_band=ZBand(z=(420, 600), bin=2, tilt_deg=20.0))
+    _group(mount, ["step1000"], center_px=1008.5, z_band=ZBand(z=(420, 600), bin=2, tilt_deg=20.0, depth=1090))
     r = run_job(mount, "align.center_compare", {"tag": "step1000", "centers_px": [1008.5, 976.11]})
     assert [(c.center_px, c.band) for c in r.centers] == [(1008.5, (420, 600)), (976.11, (420, 600))]
     assert all(420 <= c.z_peak < 600 for c in r.centers)

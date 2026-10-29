@@ -30,32 +30,23 @@ def _tilt(group: Group | None, tilt_deg: float | None) -> float:
     return DEFAULT_TILT_DEG
 
 
-def _band(scan: Scan, group: Group | None) -> tuple[tuple[int, int], float] | None:
-    """The group's sample band as this scan's rows, at the tilt it was read."""
+def _band(
+    stack: _core.Stack, scan: Scan, group: Group | None, tilt: float | None = None
+) -> tuple[tuple[int, int], float] | None:
+    """The group's sample band as rows of this scan's volume at `tilt`, by
+    default the tilt it was read at, and that tilt."""
     zb = group.z_band if group else None
     if zb is None:
         return None
-    if zb.bin != scan.bin:
-        raise Refused(
-            f"group {group.name}'s z_band was read at bin {zb.bin}; scan {scan.tag} "
-            f"is bin {scan.bin}: pass the slices explicitly"
-        )
-    return tuple(zb.z), zb.tilt_deg
+    t = zb.tilt_deg if tilt is None else tilt
+    return units.band_for(zb, scan.bin, t, stack.depth(t)), t
 
 
 def _slice(stack: _core.Stack, scan: Scan, group: Group | None, tilt: float, slice: int | None) -> int:
     if slice is not None:
         return slice
-    band = _band(scan, group)
-    if band is None:
-        return stack.default_slice(tilt)
-    z, at = band
-    if at != tilt:
-        raise Refused(
-            f"group {group.name}'s z_band was read at tilt {at}; this sweep is at "
-            f"{tilt}: pass slice"
-        )
-    return stack.default_slice(tilt, z)
+    band = _band(stack, scan, group, tilt)
+    return stack.default_slice(tilt, None if band is None else band[0])
 
 
 class RingsParams(Params):
@@ -255,9 +246,9 @@ def tilt_scan(ctx: Context, p: TiltScanParams) -> TiltScanResult:
     scan, path = scans.find(ctx.project, p.tag)
     group = scans.group_of(ctx.project, scan)
     c = _decided_center(scan, group, p.center_px)
-    band = _band(scan, group)
     ctx.progress(0.0, "loading the stack")
     stack = scans.stack(path)
+    band = _band(stack, scan, group)
     best: list[np.ndarray] = []
     xz: list[np.ndarray] = []
 
@@ -319,9 +310,9 @@ def center_compare(ctx: Context, p: CompareParams) -> CompareResult:
     scan, path = scans.find(ctx.project, p.tag)
     group = scans.group_of(ctx.project, scan)
     tilt = _tilt(group, p.tilt_deg)
-    band = _band(scan, group)
     ctx.progress(0.0, "loading the stack")
     stack = scans.stack(path)
+    band = _band(stack, scan, group)
     best: list[np.ndarray] = []
     centers = []
     for c in p.centers_px:

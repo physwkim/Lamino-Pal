@@ -138,6 +138,23 @@ fn lamino_depth(height: usize, tilt_deg: f32) -> usize {
     tomoxide::cuda::lamino_recon_height(height, tilt_deg)
 }
 
+/// Rows `z` of a `depth_from`-deep volume at `tilt_from`, carried into the
+/// `depth_to`-deep volume at `tilt_to` through the detector rows.
+#[pyfunction]
+fn band_at(
+    z: (usize, usize),
+    depth_from: usize,
+    tilt_from: f32,
+    tilt_to: f32,
+    depth_to: usize,
+) -> (usize, usize) {
+    SampleBand {
+        z,
+        tilt_deg: tilt_from,
+    }
+    .at(depth_from, tilt_to, depth_to)
+}
+
 /// JSON `{depth, r_lateral, radius, full_z}` of the disk every projection saw
 /// in a laminography reconstruction of a `width` × `height` detector at
 /// `center` and `tilt_deg`: `radius[z]` per output row, `full_z` the
@@ -420,6 +437,7 @@ pub(crate) fn add(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(judge_sweep, m)?)?;
     m.add_function(wrap_pyfunction!(recipe_config, m)?)?;
     m.add_function(wrap_pyfunction!(lamino_depth, m)?)?;
+    m.add_function(wrap_pyfunction!(band_at, m)?)?;
     m.add_function(wrap_pyfunction!(valid_fov, m)?)?;
     m.add_function(wrap_pyfunction!(focus_by_z, m)?)?;
     Ok(())

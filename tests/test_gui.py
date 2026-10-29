@@ -13,6 +13,7 @@ import h5py
 import numpy as np
 import PySide6.QtCore  # noqa: F401  # silx takes the binding napari's qtpy is pinned to
 import pytest
+from conftest import band_at
 from silx.gui import qt
 from test_recon import _scan
 
@@ -226,7 +227,7 @@ def test_the_export_slices_follow_the_band_and_keep_a_hand_edit(app, win):
     nz = win.tabs["Volume"].shape[0]
     assert (ex.z0.value(), ex.z1.value()) == (0, nz)
     (win.project.work_dir / "fig.png").write_bytes(b"")
-    band = {"z": [2, 20], "bin": 2, "tilt_deg": 20.0}
+    band = {"z": [2, 20], "bin": 2, "tilt_deg": 20.0, "depth": nz}
     decide = {"group": "m", "field": "z_band", "value": band, "evidence": ["fig.png"], "method": "focus"}
     dispatch.run("group.decide", decide, project=win.project, caller="cli")
     # The window hears project.toml change on its own.
@@ -238,3 +239,19 @@ def test_the_export_slices_follow_the_band_and_keep_a_hand_edit(app, win):
     win.project.commit(lambda f: f.recon.update(filter_name="shepp"))
     assert pump(app, 10, lambda: heard)
     assert (ex.z0.value(), ex.z1.value()) == (5, 21)
+
+
+def test_the_volume_tab_shows_the_band_carried_to_the_volumes_tilt(app, win):
+    (win.project.work_dir / "fig.png").write_bytes(b"")
+    d20, d30 = _core.lamino_depth(32, 20.0), _core.lamino_depth(32, 30.0)
+    band = {"z": [2, 20], "bin": 2, "tilt_deg": 20.0, "depth": d20}
+    decide = {"group": "m", "field": "z_band", "value": band, "evidence": ["fig.png"], "method": "eye"}
+    dispatch.run("group.decide", decide, project=win.project, caller="cli")
+    with h5py.File(win.project.work_dir / "w.h5", "w") as f:
+        f["exchange/data"] = np.random.default_rng(0).random((d30, 8, 8), dtype="f4")
+        f.require_group("lamino_pal/provenance").attrs.update(tag="s", center_px=64.5, tilt_deg=30.0, bin=2)
+    lo, hi = band_at((2, 20), d20, 20.0, 30.0, d30)
+    assert (lo, hi) != (2, 20)
+    win._select("volume", "w.h5")
+    vt = win.tabs["Volume"]
+    assert (vt.z0.value(), vt.z1.value()) == (lo, hi)

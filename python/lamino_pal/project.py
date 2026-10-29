@@ -38,11 +38,13 @@ class Gpu(_Model):
 
 
 class ZBand(_Model):
-    """Sample rows `z` of a bin-`bin` volume reconstructed at `tilt_deg`."""
+    """Sample rows `z` of the `depth`-deep bin-`bin` volume reconstructed at
+    `tilt_deg` it was read from; `units.band_for` carries it to another."""
 
     z: tuple[int, int]
     bin: int = Field(ge=1)
     tilt_deg: float
+    depth: int = Field(ge=1)
 
 
 # How a value was read off its evidence.

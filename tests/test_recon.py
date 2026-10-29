@@ -8,13 +8,13 @@ from pathlib import Path
 import h5py
 import numpy as np
 import pytest
-from conftest import DATA
+from conftest import DATA, band_at
 from pydantic import ValidationError
 
 from lamino_pal import LaminoPalError, Refused, _core, dispatch
 from lamino_pal.artifacts import load_h5
 from lamino_pal.ops import REGISTRY, recon
-from lamino_pal.project import RECIPE
+from lamino_pal.project import RECIPE, ZBand
 
 
 def _scan(project, tag, nproj=16, shape=(8, 64)):
@@ -110,6 +110,18 @@ def test_preview_crosses_its_planes_at_the_voxel(project):
     np.testing.assert_array_equal(xz[z], sl[y])
     np.testing.assert_array_equal(yz[z], sl[:, x])
     assert seen[-1] == f"preview: row {r.depth}/{r.depth}"
+
+
+def test_preview_takes_the_middle_of_the_band_carried_to_its_tilt(project):
+    _scan(project, "s", shape=(64, 64))
+    _decide(project, "s", center_px=64.5)
+    d20, d40 = _core.lamino_depth(64, 20.0), _core.lamino_depth(64, 40.0)
+    band = ZBand(z=(10, 30), bin=2, tilt_deg=20.0, depth=d20)
+    project.commit(lambda f: setattr(f.group[0], "z_band", band))
+    lo, hi = band_at((10, 30), d20, 20.0, 40.0, d40)
+    assert (lo, hi) != (10, 30)
+    r = run(project, "recon.preview", tag="s", tilt_deg=40.0, recipe={"algorithm": "fourierrec"})
+    assert (r.depth, r.at[0]) == (d40, (lo + hi) // 2)
 
 
 def test_compare_keeps_each_variant_and_its_cnr(project, run_job):

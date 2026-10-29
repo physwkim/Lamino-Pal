@@ -81,7 +81,8 @@ the figure.
 
 - `volume_focus_by_z(volume)` on a reconstruction at the decided geometry
   suggests the band: the run of slices whose focus is at least half its peak.
-  Decide `z_band` with the bin and tilt of the volume it was read from.
+  Decide `z_band` with the bin, tilt and depth (slices) of the volume it was
+  read from; an op at another tilt carries it there.
 - `recon_split(tag)`: what both halves of the projections show is the sample;
   what one shows is noise or artifact.
 - An angular-range check is meaningful only at an established center; a

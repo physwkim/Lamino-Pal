@@ -5,7 +5,7 @@ import h5py
 import numpy as np
 import pytest
 import tifffile
-from conftest import DATA
+from conftest import DATA, band_at
 from test_align import _group
 from test_recon import _scan, run
 
@@ -65,12 +65,20 @@ def test_a_cancelled_export_leaves_no_file(project, run_job, small_bands):
 
 def test_z_defaults_to_the_group_band_of_the_volumes_scan(project, run_job):
     _scan(project, "s")
-    _group(project, ["s"], z_band=ZBand(z=(4, 20), bin=2, tilt_deg=20.0))
+    _group(project, ["s"], z_band=ZBand(z=(4, 20), bin=2, tilt_deg=20.0, depth=37))
     path, _ = _volume(project, tag="s", bin=2, tilt_deg=20.0)
     assert run(project, "export.window", volume=path).z == (4, 21)
-    other, _ = _volume(project, name="o.h5", tag="s", bin=2, tilt_deg=30.0)
-    with pytest.raises(Refused, match="read at bin 2, tilt 20.0; .*o.h5 is bin 2, tilt 30.0: pass z"):
-        run(project, "export.window", volume=other)
+    # A volume at another tilt takes the band carried there.
+    other, _ = _volume(project, shape=(41, 12, 10), name="o.h5", tag="s", bin=2, tilt_deg=30.0)
+    lo, hi = band_at((4, 20), 37, 20.0, 30.0, 41)
+    assert (lo, hi) != (4, 20)
+    assert run(project, "export.window", volume=other).z == (lo, hi + 1)
+    binned, _ = _volume(project, name="b4.h5", tag="s", bin=4, tilt_deg=20.0)
+    with pytest.raises(Refused, match="read at bin 2; this volume is bin 4: pass the slices"):
+        run(project, "export.window", volume=binned)
+    untilted, _ = _volume(project, name="u.h5", tag="s")
+    with pytest.raises(Refused, match="u.h5 has no provenance naming its bin and tilt: pass z"):
+        run(project, "export.window", volume=untilted)
     bare, _ = _volume(project, name="b.h5")
     with pytest.raises(Refused, match="b.h5 has no provenance naming its scan: pass z"):
         run_job(project, "export.mip", {"volume": bare})

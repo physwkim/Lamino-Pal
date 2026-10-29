@@ -27,7 +27,9 @@ tomoxide `docs/LAMINOGRAPHY_ALIGNMENT.md`.
   scan의 `bin`이다. import가 자기 binning을 기록하고, adopt는 h5의 `/lamino_pal`
   group에 `binning` attribute가 있으면 그 값과 대조한다(README의 "bin-2 504 = full
   1008.5" 수기 환산 제거). tilt는 tomocupy `--lamino_angle` 규약
-  `phi = π/2 + tilt·π/180`.
+  `phi = π/2 + tilt·π/180`. z-band는 읽은 볼륨의 rows로 그 볼륨의 bin, tilt,
+  depth와 함께 저장하고, 다른 tilt의 볼륨에는 `units.band_for`가 tomoxide
+  `SampleBand::at`으로 detector row를 거쳐 옮긴다.
 
 ## 2. 원본 과정 → op
 
@@ -152,7 +154,8 @@ center와 tilt, `[recon]`)은 op의 `bind`가 검증 때 params에 채운다. �
 1에서 36.5 GB)은 256 MB band 단위로 읽는다. `export.tiff16`은 z 범위를 그 범위
 8번째 slice마다의 p0.1/p99.9 window로 16-bit에 대응시키고 window와 z 범위를 page
 0 description에 적는다. 261003의 z380-700 TIFF와 byte 단위로 같다. z 범위 기본값은
-볼륨 provenance의 scan이 속한 group의 z_band이며, bin이나 tilt가 다르면 거부한다.
+볼륨 provenance의 scan이 속한 group의 z_band를 그 볼륨의 tilt와 depth로 옮긴 것이며
+(`units.band_for`), bin이 다르면 거부한다.
 `export.bin`은 h5를 2×2×2 평균한 float32 h5(3D 탭의 bin-4 볼륨)로 쓰고,
 provenance의 bin을 두 배로 적는다. 16-bit TIFF는 export_bin.py처럼 평균을 버림한
 16-bit ImageJ TIFF로 쓰며, 노트북용 TIFF는 `export.tiff16` 결과의 `export.bin`이다.
@@ -170,7 +173,7 @@ revision = 17
 name = "mountA"                 # step1000, step800, f180 *
 center_px = 1008.5              # full-res
 tilt_deg = 20.0
-z_band = { z = [390, 1089], bin = 2, tilt_deg = 20.0 }   # tomoxide SampleBand + bin
+z_band = { z = [390, 1089], bin = 2, tilt_deg = 20.0, depth = 1090 }   # 읽은 볼륨의 rows
 decisions = [ { field = "center_px", value = 1008.5, by = "user", evidence = ["artifacts/…png"], method = "rings", note = "…" } ]
 
 [[scan]]
