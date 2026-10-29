@@ -187,14 +187,18 @@ save_format = "h5"
 결정은 GUI에서 따로 표시되어 사람 확인을 받는다.
 
 **job.** job은 detached 프로세스다. GUI를 닫아도 batch는 계속 돌고, GUI와
-MCP가 같은 job을 본다. 상태는 `work_dir/jobs/<id>/state.json`(pid, pgid, op,
-params, progress, eta, result)에 있다.
+MCP가 같은 job을 본다. 상태는 `work_dir/jobs/<id>/state.json`(pid = pgid, pid
+재사용을 가리는 /proc starttime, op, params, progress, eta, result)에 있다.
+params와 출력 경로는 제출할 때 검사하고, 대기 중인 job과 같은 출력도 그때 거절한다.
 
 - `recon.run`은 submodule에서 빌드한 `tomoxide` 바이너리를 절대 경로로 실행한다
   (`--config` = `[recon]`, `--center` = `units.center_for_scan`, `--lamino_angle`,
   `--progress_json`).
-- 다른 job op는 `python -m lamino_pal.cli run <op> <params.json>`으로 돈다.
-- 취소는 자기 job의 process group에 SIGTERM을 보낸다.
+- job 프로세스는 `python -m lamino_pal.cli job <dir>`이고 `dispatch.run_job`으로
+  op를 돌린다. `lamino-pal run --project P <op> [params.json]`은 같은 op를 셸에서
+  foreground로 돌린다.
+- 취소는 자기 job의 process group에 SIGTERM을 보낸다. op는 다음 progress 호출에서
+  멈추고, tomoxide 호출 안에서 10초 넘게 못 멈추면 job 프로세스가 스스로 끝난다.
 - 완료 시 출력 h5에 `/lamino_pal/provenance`(center_px, tilt, params, source,
   tomoxide 버전, 명령줄)를 쓴다.
 - 출력 이름 규칙은 기존 것을 따른다:
@@ -205,6 +209,8 @@ params, progress, eta, result)에 있다.
 tomoxide는 CUDA 장치를 호출마다 `TOMOXIDE_CUDA_DEVICES`에서 읽으므로(없으면 GPU
 전부), 프로세스의 GPU는 띄우는 쪽이 이 env로 하나만 정하고 실행 중에는 바꾸지
 않는다. dispatcher는 그 GPU가 project의 interactive GPU일 때만 GPU op를 돌린다.
+job은 제출할 때 지금 비어 있고 대기 job이 없는 batch GPU를(없으면 대기가 가장
+적은 것을) 골라 그 env로 띄우고, job 프로세스는 그 GPU lock을 기다린다.
 `recon.run`은 scan 여러 개면 GPU당 scan 하나(run_finals.sh 방식), scan 하나면
 CLI의 multi-GPU shard를 쓴다.
 

@@ -9,6 +9,9 @@ description = "BL7C laminography reconstruction GUI and MCP server on tomoxide"
 requires-python = ">=3.12"
 dependencies = ["numpy", "h5py", "pydantic>=2", "tomli-w"]
 
+[project.scripts]
+lamino-pal = "lamino_pal.cli:main"
+
 [tool.maturin]
 python-source = "python"
 bindings = "pyo3"

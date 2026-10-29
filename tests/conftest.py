@@ -23,15 +23,13 @@ def project(tmp_path):
 
 @pytest.fixture
 def run_job():
-    """Run a job op in-process as its job will: validated, paths resolved."""
-    from lamino_pal import dispatch
-    from lamino_pal.ops import REGISTRY
+    """Run a job op in-process as its job process will, with this process's
+    GPU 0 as the project's batch GPU."""
 
     def run(project, name, params, progress=None):
-        o = REGISTRY[name]
-        p = dispatch._resolve_paths(o, o.params.model_validate(params), project)
-        ctx = dispatch.Context(project, "cli", progress or (lambda frac, msg: None))
-        return o.fn(ctx, p)
+        if project.data.gpu.batch != [0]:
+            project.commit(lambda f: setattr(f.gpu, "batch", [0]))
+        return dispatch.run_job(name, params, project=project, caller="cli", progress=progress)
 
     return run
 

@@ -50,6 +50,33 @@ def run(
     progress: Progress | None = None,
     gpu_wait_s: float = 30.0,
 ) -> Result:
+    """Run instant or interactive op `name` here, a GPU op on the project's
+    interactive GPU."""
+    return _run(name, params, project, caller, progress, gpu_wait_s, job=False)
+
+
+def run_job(
+    name: str,
+    params: dict[str, Any] | Params,
+    *,
+    project: Project,
+    caller: Caller,
+    progress: Progress | None = None,
+) -> Result:
+    """Run job op `name` in this job process, a GPU op on one of the project's
+    batch GPUs, waiting for it as long as other jobs hold it."""
+    return _run(name, params, project, caller, progress, None, job=True)
+
+
+def _run(
+    name: str,
+    params: dict[str, Any] | Params,
+    project: Project,
+    caller: Caller,
+    progress: Progress | None,
+    gpu_wait_s: float | None,
+    job: bool,
+) -> Result:
     t0 = time.monotonic()
     entry: dict[str, Any] = {
         "ts": datetime.now().astimezone().isoformat(timespec="milliseconds"),
@@ -62,22 +89,26 @@ def run(
         op = REGISTRY.get(name)
         if op is None:
             raise LaminoPalError(f"unknown op {name}")
-        if op.cost == "job":
-            raise LaminoPalError(f"{name} is a job op; submit it through jobs")
-        if isinstance(params, BaseModel):
-            params = params.model_dump()
-        p = _resolve_paths(op, op.params.model_validate(params), project)
+        if (op.cost == "job") != job:
+            raise LaminoPalError(
+                f"{name} is a job op; submit it through jobs" if not job else f"{name} is not a job op"
+            )
+        p = validate(op, params, project)
         entry["params"] = p.model_dump(mode="json")
         ctx = Context(project, caller, progress or (lambda frac, msg: None))
         lock = nullcontext()
         if op.gpu:
-            gpu, want = process_gpu(), project.data.gpu.interactive
-            if gpu != want:
+            gpu = process_gpu()
+            gpus = project.data.gpu.batch if job else [project.data.gpu.interactive]
+            if gpu not in gpus:
                 on = "no single GPU" if gpu is None else f"GPU {gpu}"
+                which = "a batch GPU" if job else "the interactive GPU"
                 raise Refused(
-                    f"{name} runs on the interactive GPU {want}; this process's CUDA "
-                    f"runs on {on} (start it with TOMOXIDE_CUDA_DEVICES={want})"
+                    f"{name} runs on {which} {gpus if job else gpus[0]}; this process's "
+                    f"CUDA runs on {on} (start it with TOMOXIDE_CUDA_DEVICES set to one)"
                 )
+            if gpu_wait_s is None:
+                ctx.progress(0.0, f"waiting for GPU {gpu}")
             lock = gpu_lock(gpu, gpu_wait_s)
         with lock as gpu:
             ctx.gpu = gpu
@@ -99,6 +130,13 @@ def run(
         entry.setdefault("params", params)
         entry["elapsed_s"] = round(time.monotonic() - t0, 4)
         _append_log(log_path(project), entry)
+
+
+def validate(op: Op, params: dict[str, Any] | Params, project: Project) -> Params:
+    """`params` checked against `op`, with its paths resolved and checked."""
+    if isinstance(params, BaseModel):
+        params = params.model_dump()
+    return _resolve_paths(op, op.params.model_validate(params), project)
 
 
 def _resolve_paths(op: Op, p: Params, project: Project) -> Params:
@@ -135,14 +173,31 @@ def process_gpu() -> int | None:
     return d[0] if len(d) == 1 else None
 
 
-@contextmanager
-def gpu_lock(n: int, wait_s: float) -> Iterator[int]:
-    """Hold GPU `n` exclusively across processes; refuse after `wait_s`."""
+def gpu_lock_path(n: int) -> Path:
     d = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / "lamino-pal"
     d.mkdir(parents=True, exist_ok=True)
-    with open(d / f"gpu{n}.lock", "a+") as f:
-        deadline = time.monotonic() + wait_s
-        while True:
+    return d / f"gpu{n}.lock"
+
+
+def gpu_busy(n: int) -> bool:
+    """Whether some process holds GPU `n` now."""
+    with open(gpu_lock_path(n), "a+") as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        return False
+
+
+@contextmanager
+def gpu_lock(n: int, wait_s: float | None) -> Iterator[int]:
+    """Hold GPU `n` exclusively across processes; refuse after `wait_s`, or
+    wait for good with None."""
+    with open(gpu_lock_path(n), "a+") as f:
+        if wait_s is None:
+            fcntl.flock(f, fcntl.LOCK_EX)
+        deadline = time.monotonic() + (wait_s or 0.0)
+        while wait_s is not None:
             try:
                 fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
