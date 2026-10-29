@@ -137,7 +137,8 @@ lamino_pal/
 
 **dispatcher.** 모든 op 호출은 `dispatch.run(op, params, caller)`를 지난다.
 여기서 params 검증, 출력 경로가 `work_dir` 아래인지 확인, 덮어쓰기는
-`overwrite=true`일 때만, GPU lock, 실행, `log.jsonl` 기록(op, params, 결과
+`overwrite=true`일 때만, op의 `prepare`(GPU가 필요 없는 준비, 예: recon.run의
+CLI 빌드), GPU lock, 실행, `log.jsonl` 기록(op, params, 결과
 요약, artifact, 소요 시간, caller=gui|mcp|cli, tomoxide 버전)을 한다. 기록이
 dispatcher 안에 있으므로 어떤 op도 로그를 건너뛸 수 없다. job 제출도 같은
 `dispatch.logged`로 기록되어, 제출에서 거절된 호출은 refused/invalid로, 받아들여진

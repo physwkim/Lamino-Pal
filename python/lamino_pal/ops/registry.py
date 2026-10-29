@@ -76,6 +76,9 @@ class Op:
     # submitted with and `default_out` names the file from them. It must
     # leave filled params as they are: the job validates them again.
     bind: Callable[[Any, Any], Any] | None = None
+    # (ctx, params) -> None: the op's work that needs no GPU, which the
+    # dispatcher runs before waiting for one, so the GPU stays free through it.
+    prepare: Callable[[Any, Any], None] | None = None
 
     @property
     def doc(self) -> str:
@@ -108,6 +111,7 @@ def build(
     gpu: bool = False,
     default_out: Callable[[Any, Any], dict[str, str]] | None = None,
     bind: Callable[[Any, Any], Any] | None = None,
+    prepare: Callable[[Any, Any], None] | None = None,
 ) -> Op:
     if not _NAME.match(name):
         raise ValueError(f"op name {name!r} is not `area.verb`")
@@ -119,7 +123,7 @@ def build(
         for m in (_Out, _In):
             if m not in f.metadata and _buried(f.annotation, m):
                 raise TypeError(f"op {name}: {k} hides its path marker from the dispatcher")
-    o = Op(name, cost, params, result, fn, gpu, default_out, bind)
+    o = Op(name, cost, params, result, fn, gpu, default_out, bind, prepare)
     if o.path_fields(_Out) and not issubclass(params, OutputParams):
         raise TypeError(f"op {name} writes files; its params must derive OutputParams")
     optional = [k for k in o.path_fields(_Out) if not params.model_fields[k].is_required()]
@@ -137,6 +141,7 @@ def op(
     gpu: bool = False,
     default_out: Callable[[Any, Any], dict[str, str]] | None = None,
     bind: Callable[[Any, Any], Any] | None = None,
+    prepare: Callable[[Any, Any], None] | None = None,
 ) -> Callable[[Callable[..., Result]], Callable[..., Result]]:
     def register(fn: Callable[..., Result]) -> Callable[..., Result]:
         if name in REGISTRY:
@@ -150,6 +155,7 @@ def op(
             gpu=gpu,
             default_out=default_out,
             bind=bind,
+            prepare=prepare,
         )
         return fn
 

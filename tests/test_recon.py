@@ -191,10 +191,13 @@ def test_run_writes_the_volume_with_its_provenance_and_leaves_nothing_else(
     _scan(project, "s")
     _decide(project, "s", center_px=64.5, tilt_deg=20.0)
     exe = _fake_cli(tmp_path, FAKE_RECON)
-    monkeypatch.setattr(recon, "tomoxide_cli", lambda: exe)
+    busy = []
+    monkeypatch.setattr(recon, "tomoxide_cli", lambda: busy.append(dispatch.gpu_busy(0)) or exe)
     seen = []
     params = {"tag": "s", "recipe": {"algorithm": "fourierrec"}}
     r = run_job(project, "recon.run", params, lambda f, m: seen.append((f, m)))
+    # Built before the GPU is taken, found again with it held.
+    assert busy == [False, True]
     out = Path(r.artifacts[0])
     assert out.name == "final_s_bin2_c64p5_t20_fourierrec_parzen.h5"
     assert (r.shape, r.secs) == ((8, 4, 4), 4.0)

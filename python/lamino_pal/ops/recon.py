@@ -431,6 +431,11 @@ def _cargo_build(tox: Path) -> Path:
     raise LaminoPalError("cargo built no tomoxide executable")
 
 
+def _build_cli(ctx: Context, _: RunParams) -> None:
+    ctx.progress(0.0, "building the tomoxide CLI")
+    tomoxide_cli()
+
+
 @op(
     "recon.run",
     cost="job",
@@ -439,6 +444,7 @@ def _cargo_build(tox: Path) -> Path:
     gpu=True,
     default_out=_final_out,
     bind=_bind_run,
+    prepare=_build_cli,
 )
 def run(ctx: Context, p: RunParams) -> RunResult:
     """Reconstruct scan `tag` whole with `tomoxide recon` (the CLI built from
@@ -447,7 +453,6 @@ def run(ctx: Context, p: RunParams) -> RunResult:
     `/lamino_pal/provenance`: center, tilt, recipe, source, tomoxide commit
     and command line."""
     scan, path = scans.find(ctx.project, p.tag)
-    ctx.progress(0.0, "building the tomoxide CLI")
     exe = tomoxide_cli()
     out = Path(p.out)
     tail: deque[str] = deque(maxlen=40)

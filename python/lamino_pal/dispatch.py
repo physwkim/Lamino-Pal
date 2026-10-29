@@ -93,6 +93,8 @@ def _run(
         p = validate(op, params, project)
         entry["params"] = p.model_dump(mode="json")
         ctx = Context(project, caller, progress or (lambda frac, msg: None))
+        if op.prepare is not None:
+            op.prepare(ctx, p)
         lock = nullcontext()
         if op.gpu:
             gpu = process_gpu()
