@@ -265,9 +265,13 @@ TXM-Pal 구조를 따른다: `gui/ui/main.ui`(Designer), worker thread →
 - 3D에는 bin-4 볼륨(545×512×512, float32 0.57 GB)을 만들어 올린다. 최종 볼륨인
   bin-1 2180×2048×2048(36.6 GB)과 bin-2 1090×1024×1024(4.6 GB)는 GL 3D
   texture로 올리기에 너무 크다. 2D slice는 full-res를 dask로 lazy하게 연다.
-- viewer는 창을 만들 때 모두 만든다: Raw, Align, Preview에 하나, Volume에
-  넷(z, xz, yz, 3D). napari 0.6.6의 `QtViewer`는 layer가 둘 이상 든 model에
-  붙이면 KeyError를 내므로 model이 비어 있을 때 만들어야 한다.
+- viewer는 Raw, Align, Preview에 하나, Volume에 넷(z, xz, yz, 3D)이다. model은
+  창을 만들 때 만들고, `QtViewer`(하나 0.16 s)는 viewer가 처음 보일 때 만들며
+  dock도 그때 붙인다. napari 0.6.6의 canvas는 layer가 둘 이상 든 model에
+  붙이면 layer마다 model 전체를 다시 정렬하다 KeyError를 내므로, 마지막 layer가
+  붙을 때까지 정렬을 미루는 canvas(`viewer._Canvas`)를 쓴다. layer controls와
+  3D camera depth는 layer가 들어올 때만 만들어지므로, 이미 든 layer 몫은
+  `Viewer.qt_viewer`가 만든다.
 - job이 끝나면 모든 탭이 듣고, 탭은 자기가 보여 주는 op에만 반응한다. Volume은
   Export의 op인 `export.bin`을 3D용으로 낸다.
 

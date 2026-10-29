@@ -71,16 +71,16 @@ class Tab(qt.QWidget):
 
     def viewer(self, title: str, docked: bool = True) -> Viewer:
         """A viewer of this tab; a docked one's layer list and controls show
-        in the window while this tab does."""
+        in the window while this tab does, from when its canvas is made."""
         v = Viewer(title)
         if docked:
-            self.win.attach_docks(self, v)
+            v.made.connect(lambda qv: self.win.attach_docks(self, qv))
         self.viewers.append(v)
         return v
 
     def close_viewers(self) -> None:
         for v in self.viewers:
-            v.qt_viewer.close()
+            v.close_canvas()
 
     def say(self, text: str, secs: int = 20) -> None:
         self.win.statusBar().showMessage(text, secs * 1000)

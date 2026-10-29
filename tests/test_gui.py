@@ -23,6 +23,7 @@ from lamino_pal.gui import status
 from lamino_pal.gui.actions import ACTIONS, RunOpDialog
 from lamino_pal.gui.form import ParamsForm
 from lamino_pal.gui.runner import Runner
+from lamino_pal.gui.viewer import Viewer
 from lamino_pal.jobs import JobState
 from lamino_pal.ops import REGISTRY
 from lamino_pal.ops.align import Rival, SweepResult, Verdict
@@ -255,3 +256,47 @@ def test_the_volume_tab_shows_the_band_carried_to_the_volumes_tilt(app, win):
     win._select("volume", "w.h5")
     vt = win.tabs["Volume"]
     assert (vt.z0.value(), vt.z1.value()) == (lo, hi)
+
+
+@pytest.mark.parametrize("ndisplay, grid", [(2, True), (3, False)])
+def test_a_canvas_made_over_layers_is_the_one_that_heard_them_inserted(app, ndisplay, grid):
+    data = np.random.default_rng(0).random((3, 4, 8, 8), dtype="f4")
+
+    def made(before: bool):
+        v = Viewer("t")
+        v.model.dims.ndisplay = ndisplay
+        v.model.grid.enabled = grid
+        for i in range(3 if before else 0):
+            v.model.add_image(data[i], name=f"c {i}")
+        v.show()
+        pump(app, 0.1)
+        for i in range(0 if before else 3):
+            v.model.add_image(data[i], name=f"c {i}")
+        qv, layers = v.qt_viewer, v.model.layers
+        visuals = [qv.canvas.layer_to_visual[layer] for layer in layers]
+        controls = qv.controls
+        shown = [layer.name for layer in layers if controls.widgets[layer] is controls.currentWidget()]
+        state = (
+            [x.order for x in visuals],
+            len({id(x.node.parent) for x in visuals}),
+            shown,
+            qv.canvas.camera._3D_camera.depth_value,
+        )
+        v.close_canvas()
+        v.close()
+        return state
+
+    assert made(True) == made(False)
+
+
+def test_a_viewer_makes_its_canvas_when_first_shown(app, win):
+    at, vt = win.tabs["Align"], win.tabs["Volume"]
+    assert not any(v._qt_viewer for t in win.tabs.values() for v in t.viewers)
+    win.show_tab("Align")
+    pump(app, 0.2)
+    assert at.view._qt_viewer and len(at.docks) == 2 and all(d.isVisible() for d in at.docks)
+    win._select("volume", "v.h5")
+    pump(app, 0.2)
+    # The 3D viewer is on a page not yet shown.
+    assert [v._qt_viewer is not None for v in vt.viewers] == [True, True, True, False]
+    assert all(d.isVisible() for d in vt.docks) and not any(d.isVisible() for d in at.docks)

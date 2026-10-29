@@ -154,19 +154,22 @@ class MainWindow(qt.QMainWindow):
 
     def _tab_changed(self, i: int) -> None:
         self.stackParams.setCurrentIndex(i)
-        cur = list(self.tabs.values())[i]
+        self._show_docks()
+
+    def _show_docks(self) -> None:
+        """Each tab's docks shown while it is the current tab."""
+        cur = self.current_tab()
         for tab in self.tabs.values():
             for dock in tab.docks:
                 dock.setVisible(tab is cur)
 
-    def attach_docks(self, tab, viewer) -> None:
-        """Viewer `viewer`'s layer controls and list beside the parameters,
-        shown while `tab` is (from `_tab_changed`)."""
-        qv = viewer.qt_viewer
+    def attach_docks(self, tab, qv) -> None:
+        """QtViewer `qv`'s layer controls and list beside the parameters,
+        shown while `tab` is."""
         for dock in (qv.dockLayerControls, qv.dockLayerList):
             self.addDockWidget(qt.Qt.RightDockWidgetArea, dock)
-            dock.hide()
             tab.docks.append(dock)
+        self._show_docks()
 
     def _job_ended(self, st: JobState) -> None:
         if st.status == "failed":
