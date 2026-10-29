@@ -14,6 +14,7 @@ import pytest
 from mcp import Client, StdioServerParameters
 from PIL import Image
 from pydantic import Field
+from conftest import DATA
 from test_align import _group
 from test_recon import _scan
 
@@ -22,6 +23,7 @@ from lamino_pal.mcp.server import FIGURES, build
 from lamino_pal.ops import REGISTRY
 from lamino_pal.ops.registry import Params, Result
 from lamino_pal.ops.registry import build as build_op
+from lamino_pal.project import Project
 
 pytestmark = pytest.mark.anyio
 
@@ -237,3 +239,31 @@ def test_an_unreadable_project_stops_the_server(tmp_path):
         env=_env(), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60,
     )
     assert p.returncode == 2 and f"cannot read project {bad}" in p.stderr
+
+
+@pytest.mark.golden
+async def test_the_stdio_server_aligns_previews_and_cancels_a_run_on_step1000(tmp_path):
+    p = Project.create(tmp_path / "e2e" / "project.toml", str(DATA))
+    dispatch.run("scan.adopt", {"tag": "step1000", "h5": str(DATA / "tomoxide/step1000_bin2.h5"), "bin": 2,
+                                "kind": "step"}, project=p, caller="cli")
+    server = StdioServerParameters(
+        command=sys.executable, args=["-m", "lamino_pal.mcp", "--project", str(p.path)], env=_env()
+    )
+    async with Client(server) as c:
+        r = await c.call_tool("align_rings", {"tag": "step1000"})
+        assert r.structured_content["trustworthy"] is False and _image(r).mode == "L"
+        r = await c.call_tool("align_center_sweep", {"tag": "step1000"})
+        assert r.structured_content["verdict"]["kind"] == "ambiguous"
+        assert "(best, focus" in r.content[1].text and "(rival, focus" in r.content[1].text
+        args = {"tag": "step1000", "center_px": 1008.5, "tilt_deg": 20.0, "recipe": {"algorithm": "fourierrec"}}
+        r = await c.call_tool("recon_preview", args)
+        assert r.structured_content["at"] == [545, 512, 512] and _image(r).mode == "L"
+        r = await c.call_tool("recon_run", args)
+        jid = r.structured_content["job_id"]
+        st = r.structured_content
+        while st["status"] == "queued":
+            st = (await c.call_tool("job_wait", {"job_id": jid, "timeout_s": 0.5})).structured_content
+        assert st["status"] == "running", st
+        await c.call_tool("job_cancel", {"job_id": jid})
+        st = (await c.call_tool("job_wait", {"job_id": jid, "timeout_s": 45})).structured_content
+    assert st["status"] == "cancelled", st
