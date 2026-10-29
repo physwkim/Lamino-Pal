@@ -70,13 +70,27 @@ def test_focus_by_z_scores_every_slice_and_finds_the_textured_band(project, step
     # Chunked reads score each slice as one call over the whole volume does.
     np.testing.assert_array_equal(r.focus, _core.focus_by_z(vol[::step].copy()))
     assert r.band == (40, 98 + (step == 1)) and 40 <= r.peak_z <= 99
+    assert (r.air, r.wrap) == ([(0, 38 + (step == 1)), (100, 148 + (step == 1))], None)
     assert seen[-1] == "slice 150/150"
 
 
-def test_suggest_band_takes_the_longest_run_and_none_of_a_blank_volume():
+def test_z_regions_take_the_longest_run_and_none_of_a_blank_volume():
     f = np.r_[np.ones(40), np.zeros(40), np.ones(60), np.zeros(10)]
-    assert volume.suggest_band(f) == (80, 139)
-    assert volume.suggest_band(np.zeros(20)) is None
+    # The sharp run at z 0 is not wrap: the band's run reaches neither end.
+    assert volume.z_regions(f) == ((80, 139), [(40, 79), (140, 149)], None)
+    assert volume.z_regions(np.zeros(20)) == (None, [], None)
+
+
+def test_z_regions_mark_the_wrap_at_the_end_the_bands_run_does_not_reach():
+    f = np.r_[np.full(30, 0.3), np.full(40, 0.01), np.ones(80)]
+    assert volume.z_regions(f) == ((70, 149), [(30, 69)], (0, 29))
+    assert volume.z_regions(f[::-1]) == ((0, 79), [(80, 119)], (120, 149))
+    assert volume.z_regions(f[::2], step=2) == ((70, 148), [(30, 68)], (0, 28))
+
+
+def test_z_regions_mark_no_air_where_the_least_focus_reaches_a_quarter_of_the_peak():
+    f = np.r_[np.full(30, 0.3), np.full(40, 0.25), np.ones(80)]
+    assert volume.z_regions(f) == ((70, 149), [], None)
 
 
 def test_valid_fov_takes_the_scan_center_and_tilt_from_the_provenance(project):
@@ -97,17 +111,17 @@ def test_valid_fov_takes_the_scan_center_and_tilt_from_the_provenance(project):
 
 @pytest.mark.golden
 @pytest.mark.parametrize(
-    "name, band",
+    "name, band, air, wrap",
     [
         # README: sample 390..1089, air 150..390, z wrap 0..150 (read by eye).
-        ("final_step1000_bin2_c504_t20_fourierrec_parzen.h5", (373, 1076)),
+        ("final_step1000_bin2_c504_t20_fourierrec_parzen.h5", (373, 1076), [(143, 340)], (0, 142)),
         # The f360 mount's sample fills the whole depth.
-        ("fly/final_f360_N667_3dps_c500_t20_fourierrec_parzen.h5", (0, 1089)),
+        ("fly/final_f360_N667_3dps_c500_t20_fourierrec_parzen.h5", (0, 1089), [], None),
     ],
 )
-def test_focus_by_z_band_on_the_261003_finals(golden_project, name, band):
+def test_focus_by_z_regions_on_the_261003_finals(golden_project, name, band, air, wrap):
     r = run(golden_project, "volume.focus_by_z", volume=str(DATA / "tomoxide" / name))
-    assert r.band == band
+    assert (r.band, r.air, r.wrap) == (band, air, wrap)
 
 
 @pytest.mark.golden

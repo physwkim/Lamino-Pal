@@ -343,9 +343,12 @@ tilt ✓, z-band ✓, 재구성 n/m. 상태는 project에서 계산하고 따로
      축이다. 위치는 `[z, y, x]` 하나가 갖고, 그 값과 같은 step event는 무시한다
      (napari는 한 step에 event를 여러 번 보낸다).
    - focus-by-z curve(silx)에 peak와 band 경계 marker 두 개(끌어서 조정)를
-     그린다. 제안은 sample 구간 하나뿐이다: median-filter한 focus가 최대의 절반
-     이상인 가장 긴 구간이고, air와 z wrap은 따로 표시하지 않는다. 사용자가
-     확정한다.
+     그리고, 제안 band와 air, z wrap을 음영으로 칠한다(`z_regions`). band는
+     median-filter한 focus가 최대의 절반 이상인 가장 긴 구간, air는 그 밖에서
+     최소 focus의 두 배 이하인 구간이다(그 두 배가 최대의 절반에 닿으면 air는
+     없다). Fourier reconstruction의 z는 주기적이라 볼륨 한쪽 끝에서 잘린
+     sample은 반대쪽 끝에 나타난다: band를 품은 air보다 선명한 구간이 한쪽
+     끝에 닿으면 반대쪽 끝의 선명한 구간이 z wrap이다. 사용자가 band를 확정한다.
    - valid FOV 원과 z 한계는 napari Shapes overlay로 그린다. window 기본값은
      p0.5/p99.5(`contrast_limits`)이다.
    - 3D: 따로 둔 viewer page에 볼륨의 `export.bin` 결과 `<stem>_binned.h5`를

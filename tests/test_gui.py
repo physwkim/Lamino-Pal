@@ -16,6 +16,7 @@ import PySide6.QtCore  # noqa: F401  # silx takes the binding napari's qtpy is p
 import pytest
 from conftest import band_at, pump
 from silx.gui import qt
+from silx.gui.plot.items import Shape
 from test_recon import _scan
 
 from lamino_pal import _core, dispatch
@@ -28,6 +29,7 @@ from lamino_pal.gui.viewer import Viewer
 from lamino_pal.jobs import JobState
 from lamino_pal.ops import REGISTRY
 from lamino_pal.ops.align import Rival, SweepResult, Verdict
+from lamino_pal.ops.volume import FocusResult
 
 
 @pytest.fixture(scope="module")
@@ -246,6 +248,17 @@ def test_the_volume_tab_shows_the_band_carried_to_the_volumes_tilt(app, win):
     win._select("volume", "w.h5")
     vt = win.tabs["Volume"]
     assert (vt.z0.value(), vt.z1.value()) == (lo, hi)
+
+
+def test_the_focus_curve_shades_the_band_air_and_z_wrap(app, win):
+    vt = win.tabs["Volume"]
+    f = [0.3] * 30 + [0.01] * 40 + [1.0] * 80
+    r = FocusResult(shape=(150, 8, 8), step=1, focus=f, peak_z=70, band=(70, 149), air=[(30, 69)], wrap=(0, 29))
+    vt._show_focus(r)
+    x = {s.getName(): s.getPoints()[:, 0] for s in vt.plot.getItems() if isinstance(s, Shape)}
+    shapes = {k: (v.min(), v.max()) for k, v in x.items()}
+    assert shapes == {"suggested band 0": (70, 149), "air 0": (30, 69), "z wrap 0": (0, 29)}
+    assert vt.plot.getGraphTitle() == "suggested band [70, 149] (gray), air [30, 69] (blue), z wrap [0, 29] (orange)"
 
 
 @pytest.mark.parametrize("ndisplay, grid", [(2, True), (3, False)])

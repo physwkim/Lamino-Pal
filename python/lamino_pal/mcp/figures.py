@@ -20,6 +20,8 @@ FIGURES = Path("artifacts/figures")  # under the work directory
 # comparisons were: the eye picked 512 there, neither the focus best nor a
 # rival, and 460/464 on a curve railed at 472.
 SPREAD = 5
+# A focus_by_z curve's shades: (color, its name in a caption).
+SHADES = {"suggested band": ("#d9d9d9", "gray"), "air": ("#cfe3f3", "blue"), "z wrap": ("#f7d3b5", "orange")}
 _FIGURES: dict[str, Callable[[dict[str, Any], Arrays], tuple[np.ndarray, str]]] = {}
 
 
@@ -213,6 +215,17 @@ def _mip(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
     )
 
 
+def shaded(band, air, wrap) -> dict[str, list[tuple[int, int]]]:
+    """The slices each shade of a focus_by_z curve marks, by `SHADES` name;
+    a shade with none left out."""
+    spans = {"suggested band": [band] if band else [], "air": list(air), "z wrap": [wrap] if wrap else []}
+    return {k: v for k, v in spans.items() if v}
+
+
+def shades_key(spans: dict[str, list[tuple[int, int]]]) -> str:
+    return ", ".join(f"{k} {' and '.join(f'[{a}, {b}]' for a, b in v)} ({SHADES[k][1]})" for k, v in spans.items())
+
+
 @_figure("volume.focus_by_z")
 def _focus(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
     from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -224,13 +237,14 @@ def _focus(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
     canvas = FigureCanvasAgg(fig)
     ax = fig.add_subplot()
     ax.plot(z, f, color="black", lw=1)
-    if r["band"] is not None:
-        ax.axvspan(*r["band"], color="0.85", lw=0)
+    spans = shaded(r["band"], r["air"], r["wrap"])
+    for k, v in spans.items():
+        for a, b in v:
+            ax.axvspan(a, b, color=SHADES[k][0], lw=0)
     ax.axvline(r["peak_z"], color="0.4", lw=1, ls="--")
     ax.set(xlabel="slice z", ylabel="focus (mean |∇|²)", xlim=(0, r["shape"][0]))
     canvas.draw()
-    band = "none" if r["band"] is None else f"[{r['band'][0]}, {r['band'][1]}] (shaded)"
     return np.asarray(canvas.buffer_rgba())[..., :3].copy(), (
-        f"Focus of every {r['step']}th slice of {r['shape'][0]}; suggested band {band}, "
+        f"Focus of every {r['step']}th slice of {r['shape'][0]}; {shades_key(spans) or 'no suggested band'}, "
         f"peak at z={r['peak_z']} (dashed)."
     )

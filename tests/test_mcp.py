@@ -240,6 +240,17 @@ def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_below_its_slice():
         assert (im[top + d :, col] == 255).all()
 
 
+def test_a_focus_curve_shades_its_band_air_and_z_wrap():
+    f = [0.3] * 30 + [0.01] * 40 + [1.0] * 80
+    r = {"step": 1, "shape": [150, 8, 8], "focus": f, "peak_z": 70}
+    r |= {"band": [70, 149], "air": [[30, 69]], "wrap": [0, 29]}
+    image, caption = figures.render("volume.focus_by_z", r, {})
+    assert "suggested band [70, 149] (gray), air [30, 69] (blue), z wrap [0, 29] (orange)," in caption
+    im = np.asarray(Image.open(io.BytesIO(image)).convert("RGB"))
+    for color, _ in figures.SHADES.values():
+        assert (im == Image.new("RGB", (1, 1), color).getpixel((0, 0))).all(-1).any(), color
+
+
 def test_a_sweep_shows_its_best_rivals_and_candidates_spread_over_its_range():
     c = [976.0 + i for i in range(49)]
     frames = np.random.default_rng(0).random((49, 32, 32), dtype="f4")

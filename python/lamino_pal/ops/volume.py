@@ -121,18 +121,46 @@ BAND_WINDOW = 31  # slices of the running median the band is read from
 CHUNK = 64  # slices read per focus call
 
 
-def suggest_band(focus: np.ndarray, step: int = 1) -> tuple[int, int] | None:
-    """The slices (inclusive) of the longest run whose focus, median-filtered
-    over `BAND_WINDOW` slices, is at least half its peak; `focus` holds every
-    `step`-th slice's."""
+def _runs(on: np.ndarray) -> np.ndarray:
+    """[first, last] of each run of True in `on`."""
+    e = np.diff(np.concatenate(([0], on.astype(np.int8), [0])))
+    return np.stack((np.flatnonzero(e == 1), np.flatnonzero(e == -1) - 1), axis=1)
+
+
+def z_regions(
+    focus: np.ndarray, step: int = 1
+) -> tuple[tuple[int, int] | None, list[tuple[int, int]], tuple[int, int] | None]:
+    """The sample band, the air and the z wrap: slices (inclusive) of the
+    focus median-filtered over `BAND_WINDOW` slices; `focus` holds every
+    `step`-th slice's. The band is the longest run at least half the peak;
+    air, what lies outside it within twice the least focus, none when that
+    reaches half the peak. Fourier reconstruction's z is periodic, so a sample
+    the volume cuts at one end shows at the other: the wrap is the run sharper
+    than air at the far end when the band's run reaches the near one."""
     w = max(1, BAND_WINDOW // step) | 1
     s = np.median(sliding_window_view(np.pad(focus, w // 2, mode="edge"), w), axis=1)
     if not s.size or s.max() <= 0:
-        return None
-    on = np.concatenate(([0], (s >= s.max() / 2).astype(np.int8), [0]))
-    starts, ends = np.flatnonzero(np.diff(on) == 1), np.flatnonzero(np.diff(on) == -1) - 1
-    k = int(np.argmax(ends - starts))
-    return int(starts[k]) * step, int(ends[k]) * step
+        return None, [], None
+
+    def at(run) -> tuple[int, int]:
+        return int(run[0]) * step, int(run[1]) * step
+
+    on = _runs(s >= s.max() / 2)
+    b0, b1 = on[np.argmax(on[:, 1] - on[:, 0])]
+    floor = s.min()
+    if 4 * floor >= s.max():
+        return at((b0, b1)), [], None
+    out = np.ones(s.size, bool)
+    out[b0 : b1 + 1] = False
+    air = [at(r) for r in _runs((s <= 2 * floor) & out)]
+    sharp = _runs(s > 2 * floor)
+    lo, hi = sharp[(sharp[:, 0] <= b0) & (sharp[:, 1] >= b1)][0]
+    wrap = None
+    if hi == s.size - 1 and lo > 0 and sharp[0, 0] == 0:
+        wrap = at(sharp[0])
+    elif lo == 0 and hi < s.size - 1 and sharp[-1, 1] == s.size - 1:
+        wrap = at(sharp[-1])
+    return at((b0, b1)), air, wrap
 
 
 class FocusParams(VolumeParams):
@@ -145,15 +173,17 @@ class FocusResult(Result):
     focus: list[float]  # of slices 0, step, 2·step, …
     peak_z: int
     band: tuple[int, int] | None  # suggested sample slices, inclusive
+    air: list[tuple[int, int]]  # slices outside the band within twice the least focus, inclusive
+    wrap: tuple[int, int] | None  # slices the sample cut by the other end wraps into, inclusive
 
 
 @op("volume.focus_by_z", cost="interactive", params=FocusParams, result=FocusResult)
 def focus_by_z(ctx: Context, p: FocusParams) -> FocusResult:
     """The focus of every `step`-th slice of volume `volume` (mean |∇|² inside
-    a 0.92-FOV disk, the align ops' score) and a suggested sample band: the
-    longest run of slices at least half as sharp as the sharpest stretch,
-    which air and the z wrap above the sample are not. Confirm the band by eye
-    before `group.decide`."""
+    a 0.92-FOV disk, the align ops' score), a suggested sample band, the
+    longest run of slices at least half as sharp as the sharpest stretch, and
+    the air and the z wrap marked outside it (`z_regions`). Confirm the band
+    by eye before `group.decide`."""
     d = data(p.volume)
     nz = d.shape[0]
     focus: list[float] = []
@@ -162,12 +192,15 @@ def focus_by_z(ctx: Context, p: FocusParams) -> FocusResult:
         focus += _core.focus_by_z(np.ascontiguousarray(d[z0 : z1 : p.step], dtype=np.float32))
         ctx.progress(z1 / nz, f"slice {z1}/{nz}")
     f = np.array(focus)
+    band, air, wrap = z_regions(f, p.step)
     return FocusResult(
         shape=d.shape,
         step=p.step,
         focus=focus,
         peak_z=int(np.argmax(f)) * p.step,
-        band=suggest_band(f, p.step),
+        band=band,
+        air=air,
+        wrap=wrap,
     )
 
 

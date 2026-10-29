@@ -257,7 +257,13 @@ class VolumeTab(Tab):
     def _show_focus(self, r: Result) -> None:
         self._focus = r
         self.plot.clear()
-        self.plot.setGraphTitle("")
+        spans = figures.shaded(r.band, r.air, r.wrap)
+        self.plot.setGraphTitle(figures.shades_key(spans))
+        top = max(r.focus, default=0.0)
+        for k, v in spans.items():
+            for i, (a, b) in enumerate(v):
+                color = figures.SHADES[k][0]
+                self.plot.addShape((a, b), (0, top), legend=f"{k} {i}", shape="rectangle", color=color, z=0)
         z = np.arange(len(r.focus)) * r.step
         self.plot.addCurve(z, r.focus, legend="focus", color="black")
         self.plot.addXMarker(r.peak_z, legend="peak", text="peak", color="gray")

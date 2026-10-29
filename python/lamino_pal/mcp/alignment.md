@@ -81,6 +81,8 @@ the figure.
 
 - `volume_focus_by_z(volume)` on a reconstruction at the decided geometry
   suggests the band: the run of slices whose focus is at least half its peak.
+  Its `wrap` is a sample the volume cuts at one end showing at the other
+  (Fourier z is periodic): texture there is not sample to widen the band to.
   Decide `z_band` with the bin, tilt and depth (slices) of the volume it was
   read from; an op at another tilt carries it there.
 - `recon_split(tag)`: what both halves of the projections show is the sample;
