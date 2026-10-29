@@ -93,6 +93,10 @@ def run(
 
 def _resolve_paths(op: Op, p: Params, project: Project) -> Params:
     wd, raw = project.work_dir, project.raw_root
+    unset = [k for k in op.path_fields(_Out) if getattr(p, k) is None]
+    if unset:
+        names = op.default_out(p)
+        p = p.model_copy(update={k: names[k] for k in unset})
     upd: dict[str, str] = {}
     for k in op.path_fields(_In):
         path = (wd / getattr(p, k)).resolve()

@@ -10,7 +10,7 @@ import importlib
 import pkgutil
 import re
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Literal
+from typing import Annotated, Any, Callable, Literal, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, PrivateAttr
 
@@ -28,6 +28,10 @@ class _In:
 # Resolved against the work directory; the dispatcher refuses one outside it,
 # under the raw root, or existing without `overwrite`.
 OutPath = Annotated[str, _Out]
+# An `OutPath` the caller may omit (`= None`); the op's `default_out` names it.
+# Not `OutPath | None`: pydantic drops a marker inside a Union arm, which
+# `build` refuses.
+OptOutPath = Annotated[str | None, _Out]
 # Resolved against the work directory and must exist.
 InPath = Annotated[str, _In]
 
@@ -63,6 +67,9 @@ class Op:
     result: type[Result]
     fn: Callable[..., Result]
     gpu: bool
+    # Output-path field -> name, from the validated params; covers every
+    # optional `OutPath` field (checked in `build`).
+    default_out: Callable[[Any], dict[str, str]] | None = None
 
     @property
     def doc(self) -> str:
@@ -76,6 +83,12 @@ class Op:
 
 REGISTRY: dict[str, Op] = {}
 
+
+def _buried(ann: Any, marker: type) -> bool:
+    if get_origin(ann) is Annotated:
+        return marker in ann.__metadata__ or _buried(get_args(ann)[0], marker)
+    return any(_buried(a, marker) for a in get_args(ann))
+
 _NAME = re.compile(r"^[a-z]+\.[a-z0-9_]+$")
 
 
@@ -87,6 +100,7 @@ def build(
     result: type[Result],
     fn: Callable[..., Result],
     gpu: bool = False,
+    default_out: Callable[[Any], dict[str, str]] | None = None,
 ) -> Op:
     if not _NAME.match(name):
         raise ValueError(f"op name {name!r} is not `area.verb`")
@@ -94,9 +108,16 @@ def build(
         raise ValueError(f"op {name} has no docstring (its MCP description)")
     if not (issubclass(params, Params) and issubclass(result, Result)):
         raise TypeError(f"op {name}: params/result must derive Params/Result")
-    o = Op(name, cost, params, result, fn, gpu)
+    for k, f in params.model_fields.items():
+        for m in (_Out, _In):
+            if m not in f.metadata and _buried(f.annotation, m):
+                raise TypeError(f"op {name}: {k} hides its path marker from the dispatcher")
+    o = Op(name, cost, params, result, fn, gpu, default_out)
     if o.path_fields(_Out) and not issubclass(params, OutputParams):
         raise TypeError(f"op {name} writes files; its params must derive OutputParams")
+    optional = [k for k in o.path_fields(_Out) if not params.model_fields[k].is_required()]
+    if optional and default_out is None:
+        raise TypeError(f"op {name}: optional output paths {optional} need default_out")
     return o
 
 
@@ -107,12 +128,19 @@ def op(
     params: type[Params],
     result: type[Result],
     gpu: bool = False,
+    default_out: Callable[[Any], dict[str, str]] | None = None,
 ) -> Callable[[Callable[..., Result]], Callable[..., Result]]:
     def register(fn: Callable[..., Result]) -> Callable[..., Result]:
         if name in REGISTRY:
             raise ValueError(f"op {name} registered twice")
         REGISTRY[name] = build(
-            name, cost=cost, params=params, result=result, fn=fn, gpu=gpu
+            name,
+            cost=cost,
+            params=params,
+            result=result,
+            fn=fn,
+            gpu=gpu,
+            default_out=default_out,
         )
         return fn
 

@@ -140,7 +140,9 @@ lamino_pal/
 여기서 params 검증, 출력 경로가 `work_dir` 아래인지 확인, 덮어쓰기는
 `overwrite=true`일 때만, GPU lock, 실행, `log.jsonl` 기록(op, params, 결과
 요약, artifact, 소요 시간, caller=gui|mcp|cli, tomoxide 버전)을 한다. 기록이
-dispatcher 안에 있으므로 어떤 op도 로그를 건너뛸 수 없다.
+dispatcher 안에 있으므로 어떤 op도 로그를 건너뛸 수 없다. 생략할 수 있는 출력
+경로(`OptOutPath`)는 op의 `default_out`이 params로 이름을 짓고(예: §5의
+`final_…` 규칙), 그 이름도 같은 경로 검사를 거친다.
 
 **project.toml** (work_dir 루트; work_dir은 이 파일이 있는 폴더이며 따로 저장하지
 않는다):

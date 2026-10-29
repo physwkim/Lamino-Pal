@@ -5,7 +5,15 @@ import pytest
 from pydantic import ValidationError
 
 from lamino_pal import LaminoPalError, Refused, dispatch
-from lamino_pal.ops.registry import REGISTRY, OutPath, OutputParams, Params, Result, build
+from lamino_pal.ops.registry import (
+    REGISTRY,
+    OptOutPath,
+    OutPath,
+    OutputParams,
+    Params,
+    Result,
+    build,
+)
 
 
 def _log(project):
@@ -75,6 +83,45 @@ def test_registration_requires_output_params():
         out: OutPath
 
     with pytest.raises(TypeError, match="OutputParams"):
+        build("test.bad", cost="instant", params=P, result=Result, fn=_write)
+
+
+class NamedParams(OutputParams):
+    tag: str
+    out: OptOutPath = None
+
+
+def test_omitted_output_path_takes_the_default_name(project, monkeypatch):
+    o = build(
+        "test.named",
+        cost="instant",
+        params=NamedParams,
+        result=WriteResult,
+        fn=_write,
+        default_out=lambda p: {"out": f"{p.tag}.h5"},
+    )
+    monkeypatch.setitem(REGISTRY, o.name, o)
+    r = dispatch.run("test.named", {"tag": "a"}, project=project, caller="mcp")
+    assert r.path == str(project.work_dir / "a.h5")
+    assert _log(project)[-1]["params"]["out"] == r.path
+    with pytest.raises(Refused, match="exists"):
+        dispatch.run("test.named", {"tag": "a"}, project=project, caller="mcp")
+    with pytest.raises(Refused, match="outside"):
+        dispatch.run("test.named", {"tag": "../x"}, project=project, caller="mcp")
+    r = dispatch.run("test.named", {"tag": "a", "out": "b.h5"}, project=project, caller="mcp")
+    assert r.path == str(project.work_dir / "b.h5")
+
+
+def test_registration_requires_default_out_for_an_optional_output():
+    with pytest.raises(TypeError, match="default_out"):
+        build("test.bad", cost="instant", params=NamedParams, result=Result, fn=_write)
+
+
+def test_registration_refuses_a_path_marker_inside_a_union():
+    class P(OutputParams):
+        out: OutPath | None = None
+
+    with pytest.raises(TypeError, match="hides its path marker"):
         build("test.bad", cost="instant", params=P, result=Result, fn=_write)
 
 
