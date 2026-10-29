@@ -16,7 +16,7 @@ python = ["dep:pyo3", "dep:numpy"]
 cuda = ["tomoxide/cuda"]
 
 [dependencies]
-tomoxide = { path = "lib/tomoxide/crates/tomoxide" }
+tomoxide = { path = "lib/tomoxide/crates/tomoxide", features = ["config"] }
 pyo3 = { version = "0.27", features = ["abi3-py312"], optional = true }
 numpy = { version = "0.27", optional = true }
 rayon = "1.10"

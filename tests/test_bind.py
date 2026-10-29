@@ -55,3 +55,75 @@ def test_grid_and_judge_sweep():
     assert json.loads(_core.judge_sweep(c, [5.0, 4.0, 3.0, 2.0, 1.0]))["kind"] == "railed"
     with pytest.raises(Refused, match="5 candidates and 2 scores"):
         _core.judge_sweep(c, [1.0, 2.0])
+
+
+def test_check_recipe_refuses_what_a_reconstruction_would():
+    _core.check_recipe(json.dumps({"algorithm": "fourierrec", "filter_name": "parzen"}))
+    for recipe, why in [
+        ({"filter": "shepp"}, "has no field filter"),
+        ({"algorithm": "fbp,sirt"}, "is a chain"),
+        ({"dtype": "int8"}, "unknown dtype"),
+        ({"num_iter": "x"}, "expected usize"),
+        ([], "not a table"),
+    ]:
+        with pytest.raises(Refused, match=why):
+            _core.check_recipe(json.dumps(recipe))
+
+
+def test_valid_fov_spans_the_reconstruction_depth():
+    depth = _core.lamino_depth(1024, 20.0)
+    v = json.loads(_core.valid_fov(1024, 1024, 504.0, 20.0))
+    assert (v["depth"], len(v["radius"])) == (depth, depth)
+    z0, z1 = v["full_z"]
+    assert 0 < z0 < z1 < depth - 1
+    assert all(r >= v["r_lateral"] for r in v["radius"][z0 : z1 + 1])
+
+
+def test_focus_by_z_ranks_the_sharp_slice_first():
+    rng = np.random.default_rng(2)
+    vol = np.zeros((3, 32, 32), "f4")
+    vol[1] = rng.normal(size=(32, 32))
+    f = _core.focus_by_z(vol)
+    assert len(f) == 3 and f[1] > 0 and f[0] == f[2] == 0
+
+
+@pytest.fixture
+def turn(tmp_path):
+    """16 projections of 8x32 over a full turn: big enough to reconstruct."""
+    rng = np.random.default_rng(3)
+    path = tmp_path / "t.h5"
+    with h5py.File(path, "w") as f:
+        f["exchange/data"] = rng.integers(400, 600, (16, 8, 32)).astype("u2")
+        f["exchange/data_white"] = np.full((1, 8, 32), 1000, "u2")
+        f["exchange/data_dark"] = np.zeros((1, 8, 32), "u2")
+        f["exchange/theta"] = np.arange(16, dtype="f4") * 22.5
+    return path
+
+
+def test_select_keeps_the_named_projections(turn):
+    s = _core.Stack(turn)
+    assert s.select([1, 3, 5]).shape == (3, 8, 32)
+    with pytest.raises(LaminoPalError, match="out of range"):
+        s.select([16])
+
+
+def test_planes_cross_at_the_voxel(turn):
+    s = _core.Stack(turn)
+    recipe = json.dumps({"algorithm": "fourierrec"})
+    rh = s.depth(20.0)
+    z, y, x = rh // 2, 10, 20
+    rows = []
+    sl, xz, yz = s.planes(recipe, 16.0, 20.0, (z, y, x), lambda done, n: rows.append((done, n)))
+    assert (sl.shape, xz.shape, yz.shape) == ((32, 32), (rh, 32), (rh, 32))
+    assert rows[-1] == (rh, rh)
+    np.testing.assert_array_equal(xz[z], sl[y])
+    np.testing.assert_array_equal(yz[z], sl[:, x])
+    assert np.abs(sl).max() > 0
+    with pytest.raises(Refused, match="outside"):
+        s.planes(recipe, 16.0, 20.0, (rh, y, x))
+
+    def stop(done, n):
+        raise KeyError("stop")
+
+    with pytest.raises(KeyError, match="stop"):
+        s.planes(recipe, 16.0, 20.0, (z, y, x), stop)

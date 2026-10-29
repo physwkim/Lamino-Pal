@@ -6,13 +6,14 @@
 
 use std::path::PathBuf;
 
-use ndarray::{Array2, ArrayBase, Data, Dimension};
-use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray2};
+use ndarray::{s, Array2, Array3, ArrayBase, Axis, Data, Dimension};
+use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::prelude::*;
 use serde_json::{json, Value};
 use tomoxide::align::PreppedStack;
+use tomoxide::config::Config;
 use tomoxide::recon::center::{SampleBand, SweepVerdict, TiltFocus};
-use tomoxide::{CpuBackend, Error};
+use tomoxide::{Angles, Beam, Center, CpuBackend, CudaBackend, Detector, Error, Geometry};
 
 use crate::prep;
 use crate::python::{LaminoPalError, Refused};
@@ -92,6 +93,81 @@ fn register_shift(
     let (r, m) = (array2(&reference), array2(&moving));
     py.detach(|| tomoxide::recon::center::register_shift(&r, &m, &CpuBackend, upsample))
         .map_err(tomoxide_err)
+}
+
+fn array3(a: &PyReadonlyArray3<f32>) -> Array3<f32> {
+    let v = a.as_array();
+    Array3::from_shape_vec(v.dim(), v.iter().copied().collect()).expect("its own elements")
+}
+
+/// `recipe`, JSON of tomoxide `Config` fields, read as `tomoxide recon
+/// --config` reads its file. A field Config lacks is refused: serde drops it,
+/// so a misspelt one would run on its default.
+fn config(recipe: &str) -> PyResult<Config> {
+    let bad = |e: serde_json::Error| Refused::new_err(format!("recipe: {e}"));
+    let v: Value = serde_json::from_str(recipe).map_err(bad)?;
+    let known = serde_json::to_value(Config::default()).expect("plain data");
+    let (Some(given), Some(known)) = (v.as_object(), known.as_object()) else {
+        return Err(Refused::new_err("recipe: not a table of Config fields"));
+    };
+    if let Some(k) = given.keys().find(|k| !known.contains_key(*k)) {
+        return Err(Refused::new_err(format!(
+            "recipe: tomoxide Config has no field {k}"
+        )));
+    }
+    let c: Config = serde_json::from_value(v).map_err(bad)?;
+    c.algorithm()
+        .and(c.recon_params())
+        .and(c.prep())
+        .map_err(tomoxide_err)?;
+    Ok(c)
+}
+
+/// Refuse `recipe` (JSON of tomoxide `Config` fields) as a reconstruction
+/// would: an unknown field, an algorithm chain, a bad name or value.
+#[pyfunction]
+fn check_recipe(recipe: &str) -> PyResult<()> {
+    config(recipe).map(|_| ())
+}
+
+/// Output rows of a laminography reconstruction of `height` detector rows at
+/// `tilt_deg`.
+#[pyfunction]
+fn lamino_depth(height: usize, tilt_deg: f32) -> usize {
+    tomoxide::cuda::lamino_recon_height(height, tilt_deg)
+}
+
+/// JSON `{depth, r_lateral, radius, full_z}` of the disk every projection saw
+/// in a laminography reconstruction of a `width` × `height` detector at
+/// `center` and `tilt_deg`: `radius[z]` per output row, `full_z` the
+/// inclusive rows whose whole `r_lateral` disk is valid, or null.
+#[pyfunction]
+fn valid_fov(width: usize, height: usize, center: f32, tilt_deg: f32) -> PyResult<String> {
+    let depth = lamino_depth(height, tilt_deg);
+    let geom = Geometry {
+        angles: Angles(vec![]),
+        center: Center::Scalar(center),
+        beam: Beam::laminography(tilt_deg),
+        detector: Detector {
+            width,
+            height,
+            pixel_size: 1.0,
+        },
+    };
+    let f = geom.valid_fov(depth).map_err(tomoxide_err)?;
+    Ok(
+        json!({"depth": depth, "r_lateral": f.r_lateral, "radius": f.radius,
+               "full_z": f.full_z()})
+        .to_string(),
+    )
+}
+
+/// The focus of every slice of `vol` along axis 0: mean |∇|² inside a
+/// 0.92-FOV disk, the score the tilt scan and center sweep rank by.
+#[pyfunction]
+fn focus_by_z(py: Python<'_>, vol: PyReadonlyArray3<f32>) -> Vec<f64> {
+    let v = array3(&vol);
+    py.detach(|| tomoxide::recon::center::focus_by_z(v.view()))
 }
 
 /// `center ± half_width` in steps of `step`, `center` included.
@@ -212,6 +288,88 @@ impl Stack {
         Ok((numpy(py, &s.frames)?, s.focus))
     }
 
+    /// The stack of projections `indices` only, in that order.
+    fn select(&self, py: Python<'_>, indices: Vec<usize>) -> PyResult<Stack> {
+        py.detach(|| self.0.select(&indices))
+            .map(Stack)
+            .map_err(tomoxide_err)
+    }
+
+    /// Reconstruct with `recipe` (JSON of tomoxide `Config` fields) at
+    /// `center` and `tilt_deg`, keeping the three planes through voxel `(z, y,
+    /// x)`: `(slice z [n, n], xz at row y [rh, n], yz at column x [rh, n])`,
+    /// as `tomoxide recon` writes them for the same recipe. `on_rows(done,
+    /// rh)` runs after each tile; an exception from it stops the
+    /// reconstruction and is raised here.
+    #[pyo3(signature = (recipe, center, tilt_deg, at, on_rows=None))]
+    fn planes<'py>(
+        &self,
+        py: Python<'py>,
+        recipe: &str,
+        center: f32,
+        tilt_deg: f32,
+        at: (usize, usize, usize),
+        on_rows: Option<Py<PyAny>>,
+    ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>)> {
+        let cfg = config(recipe)?;
+        let (algorithm, params, prep) = (
+            cfg.algorithm().map_err(tomoxide_err)?,
+            cfg.recon_params().map_err(tomoxide_err)?,
+            cfg.prep().map_err(tomoxide_err)?,
+        );
+        let (z, y, x) = at;
+        let (_, _, n) = self.0.shape();
+        let rh = self.0.depth(Some(tilt_deg));
+        if z >= rh || y >= n || x >= n {
+            return Err(Refused::new_err(format!(
+                "plane (z {z}, y {y}, x {x}) is outside the {rh} x {n} x {n} volume"
+            )));
+        }
+        let geom = self.0.geometry(center, Some(tilt_deg));
+        let (mut slice, mut xz, mut yz) = (
+            Array2::zeros((n, n)),
+            Array2::zeros((rh, n)),
+            Array2::zeros((rh, n)),
+        );
+        let mut raised = None;
+        let r = py.detach(|| {
+            let backend = CudaBackend::new()?;
+            self.0.reconstruct(
+                &backend,
+                &geom,
+                algorithm,
+                &params,
+                &prep,
+                &mut |rh0, tile| {
+                    let t = &tile.array;
+                    let rows = rh0..rh0 + t.len_of(Axis(0));
+                    if rows.contains(&z) {
+                        slice.assign(&t.index_axis(Axis(0), z - rh0));
+                    }
+                    xz.slice_mut(s![rows.clone(), ..])
+                        .assign(&t.slice(s![.., y, ..]));
+                    yz.slice_mut(s![rows.clone(), ..])
+                        .assign(&t.slice(s![.., .., x]));
+                    let Some(cb) = &on_rows else { return Ok(()) };
+                    Python::attach(|py| cb.call1(py, (rows.end, rh)).map(drop)).map_err(|e| {
+                        raised = Some(e);
+                        Error::Backend("on_rows raised".into())
+                    })
+                },
+            )
+        });
+        if let Some(e) = raised {
+            return Err(e);
+        }
+        let shape = r.map_err(tomoxide_err)?;
+        if shape != (rh, n, n) {
+            return Err(LaminoPalError::new_err(format!(
+                "reconstruction is {shape:?}, not ({rh}, {n}, {n})"
+            )));
+        }
+        Ok((numpy(py, &slice)?, numpy(py, &xz)?, numpy(py, &yz)?))
+    }
+
     /// Reconstruct fully at each tilt of `tilts` and score each by its best
     /// slice; JSON list of `{tilt_deg, focus, z_peak, band, depth,
     /// focus_by_z}`. `band` is `((z0, z1), tilt_deg)`: the sample's rows in a
@@ -257,5 +415,9 @@ pub(crate) fn add(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(register_shift, m)?)?;
     m.add_function(wrap_pyfunction!(grid, m)?)?;
     m.add_function(wrap_pyfunction!(judge_sweep, m)?)?;
+    m.add_function(wrap_pyfunction!(check_recipe, m)?)?;
+    m.add_function(wrap_pyfunction!(lamino_depth, m)?)?;
+    m.add_function(wrap_pyfunction!(valid_fov, m)?)?;
+    m.add_function(wrap_pyfunction!(focus_by_z, m)?)?;
     Ok(())
 }
