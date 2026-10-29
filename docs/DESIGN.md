@@ -82,11 +82,9 @@ tilt_focus}`, `CancelToken`·progress callback 인자)로 옮기고 CLI, tomoxid
 Lamino-Pal이 모두 이것을 부른다. 검증: 옮기기 전후 `tomoxide align` 출력이
 `step1000_bin2.h5`에서 같다.
 
-**T2 — lamino fourierrec y-flip.** USFFT 경로가 linerec/fbp와 y가 뒤집혀 있다
-(`cuda/lamusfft.cu` `lam_divker2d_adj_ker`:326 `n1-ty-1`, `src/recon/lamino.rs`
-divker2d; ARCHITECTURE.md §4.1과 모순). tomoxide에서 고치고 GUI는 뒤집지 않는다.
-tomocupy 출력 방향이 달라지는 semantic change라 sign-off가 필요하고, 기존
-`final_*fourierrec*` 볼륨과 방향이 달라진다.
+**T2 — lamino fourierrec y-flip.** USFFT divker2d가 tomocupy의 `n1-ty-1` 행을
+그대로 써서 linerec/fbp와 y가 뒤집혀 있었다. tomoxide `15808c6`에서 고쳤고 GUI는
+뒤집지 않는다. tomocupy 출력과 기존 `final_*fourierrec*` 볼륨은 이제 y가 반대다.
 
 **T3 — 일반 커널 공개** (branch `feat/lamino-kernels`).
 
@@ -410,7 +408,7 @@ skip이 아니라 실패로 처리한다.
 
 - **M0.** 저장소 골격, env.yaml, 빈 core maturin 빌드, registry + dispatcher +
   project + log.
-- **M1.** tomoxide T1(필수), T3. T2는 sign-off 후.
+- **M1.** tomoxide T1(필수), T2, T3.
 - **M2.** `bl7c` import/discover/adopt, units, golden import 시험.
 - **M3.** raw/align op + GUI Data/Raw/Align 탭.
 - **M4.** preview/compare/split, job runner + `recon.run`(4 GPU), Batch/Volume
@@ -419,6 +417,4 @@ skip이 아니라 실패로 처리한다.
 
 ## 11. 결정 필요
 
-1. **T2 y-flip을 tomoxide에서 고치는지.** tomocupy와 출력 방향이 달라지고,
-   기존 `final_*fourierrec*` 볼륨과도 달라진다.
-2. **T1을 physwkim/tomoxide에 먼저 넣는지.** Lamino-Pal M3 이후는 T1에 의존한다.
+1. **T1을 physwkim/tomoxide에 먼저 넣는지.** Lamino-Pal M3 이후는 T1에 의존한다.
