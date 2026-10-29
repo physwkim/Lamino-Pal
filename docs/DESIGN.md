@@ -84,7 +84,8 @@ Lamino-Pal이 모두 이것을 부른다. 검증: 옮기기 전후 `tomoxide ali
 
 **T2 — lamino fourierrec y-flip.** USFFT divker2d가 tomocupy의 `n1-ty-1` 행을
 그대로 써서 linerec/fbp와 y가 뒤집혀 있었다. tomoxide `15808c6`에서 고쳤고 GUI는
-뒤집지 않는다. tomocupy 출력과 기존 `final_*fourierrec*` 볼륨은 이제 y가 반대다.
+뒤집지 않는다. tomocupy 출력은 이제 y가 반대다. 261003의 `final_*fourierrec*`
+볼륨은 고친 빌드로 다시 만들었다(PROCESSING.log 2026-10-29).
 
 **T3 — 일반 커널 공개** (branch `feat/lamino-kernels`).
 
@@ -398,8 +399,7 @@ skip이 아니라 실패로 처리한다.
     f180 scan → `Refused`.
   - `align.center_sweep` → Ambiguous, rival {504.8, 487.8}.
   - `recon.run` c = 1008.5, t = 20, bin 1 →
-    `final_step1000_bin1_c1008p5_t20_fourierrec_parzen.h5`와 비교. T2 이후에는 y
-    반전 후 비교.
+    `final_step1000_bin1_c1008p5_t20_fourierrec_parzen.h5`와 비교.
 - MCP e2e: stdio client로 rings → sweep → preview → `recon.run` job →
   `job_wait`/`job_cancel`. 이미지 content가 오는지 확인한다.
 - GUI smoke: `QT_QPA_PLATFORM=offscreen`, project 열기, instant op 하나,
