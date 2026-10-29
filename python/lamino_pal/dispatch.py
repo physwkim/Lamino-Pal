@@ -26,6 +26,14 @@ from lamino_pal.project import Project, is_under
 Caller = Literal["gui", "mcp", "cli"]
 Progress = Callable[[float, str], None]
 
+# The entries of this process's op calls in progress, for a job that exits
+# from under one.
+_open: dict[int, tuple[Path, dict[str, Any], float]] = {}
+
+
+class Cancelled(Exception):
+    """An op call its job's cancel cut short, whatever the op raised."""
+
 
 def log_path(project: Project) -> Path:
     return project.work_dir / "log.jsonl"
@@ -62,10 +70,12 @@ def run_job(
     project: Project,
     caller: Caller,
     progress: Progress | None = None,
+    cancelled: Callable[[], bool] = lambda: False,
 ) -> Result:
     """Run job op `name` in this job process, a GPU op on one of the project's
-    batch GPUs, waiting for it as long as other jobs hold it."""
-    return _run(name, params, project, caller, progress, None, job=True)
+    batch GPUs, waiting for it as long as other jobs hold it. Once
+    `cancelled()`, whatever the op raises is raised as `Cancelled`."""
+    return _run(name, params, project, caller, progress, None, job=True, cancelled=cancelled)
 
 
 def _run(
@@ -76,6 +86,7 @@ def _run(
     progress: Progress | None,
     gpu_wait_s: float | None,
     job: bool,
+    cancelled: Callable[[], bool] = lambda: False,
 ) -> Result:
     t0 = time.monotonic()
     entry: dict[str, Any] = {
@@ -85,6 +96,7 @@ def _run(
         "revision": project.revision,
         "tomoxide": _core.tomoxide_rev(),
     }
+    _open[id(entry)] = (log_path(project), entry, t0)
     try:
         op = REGISTRY.get(name)
         if op is None:
@@ -117,19 +129,39 @@ def _run(
             raise TypeError(f"{name} returned {type(r).__name__}, not {op.result.__name__}")
         entry.update(status="ok", result=r.model_dump(mode="json"))
         return r
-    except Refused as e:
-        entry.update(status="refused", error=str(e))
-        raise
-    except ValidationError as e:
-        entry.update(status="invalid", error=str(e))
-        raise
     except BaseException as e:
-        entry.update(status="error", error=f"{type(e).__name__}: {e}")
+        # SIGTERM reaches the op's children too, so whatever the op raises
+        # once the cancel arrived is the cancel's doing.
+        if cancelled():
+            entry.update(status="cancelled", error=f"{type(e).__name__}: {e}")
+            if isinstance(e, Cancelled):
+                raise
+            raise Cancelled(entry["error"]) from e
+        if isinstance(e, Refused):
+            entry.update(status="refused", error=str(e))
+        elif isinstance(e, ValidationError):
+            entry.update(status="invalid", error=str(e))
+        else:
+            entry.update(status="error", error=f"{type(e).__name__}: {e}")
         raise
     finally:
-        entry.setdefault("params", params)
-        entry["elapsed_s"] = round(time.monotonic() - t0, 4)
-        _append_log(log_path(project), entry)
+        _open.pop(id(entry), None)
+        _close(log_path(project), entry, params, t0)
+
+
+def abandon(status: str, error: str) -> None:
+    """Log the op calls still running here as ended `status`: this process
+    exits from under them."""
+    for path, entry, t0 in list(_open.values()):
+        entry.update(status=status, error=error)
+        _close(path, entry, entry.get("params"), t0)
+    _open.clear()
+
+
+def _close(path: Path, entry: dict[str, Any], params: Any, t0: float) -> None:
+    entry.setdefault("params", params)
+    entry["elapsed_s"] = round(time.monotonic() - t0, 4)
+    _append_log(path, entry)
 
 
 def validate(op: Op, params: dict[str, Any] | Params, project: Project) -> Params:

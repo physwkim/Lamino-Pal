@@ -37,6 +37,10 @@ def until(f, timeout_s=20.0):
     return v
 
 
+def last_log(project):
+    return json.loads(dispatch.log_path(project).read_text().splitlines()[-1])
+
+
 def gone(pid):
     try:
         stat = Path(f"/proc/{pid}/stat").read_text()
@@ -54,7 +58,7 @@ def test_a_job_runs_detached_and_records_its_result(project):
     assert st.result["artifacts"] == [str(out)] and out.read_text() == "4"
     assert st.params["out"] == str(out)
     assert [s.id for s in jobs.list_(project)] == [st.id]
-    entry = json.loads(dispatch.log_path(project).read_text().splitlines()[-1])
+    entry = last_log(project)
     assert (entry["op"], entry["caller"], entry["status"]) == ("test.steps", "mcp", "ok")
 
 
@@ -98,6 +102,7 @@ def test_cancel_stops_the_job_and_its_process_group_only(project, sleeper):
     jobs.cancel(project, st.id)
     st = jobs.wait(project, st.id, 20)
     assert (st.status, st.result) == ("cancelled", None)
+    assert (last_log(project)["status"], last_log(project)["error"]) == ("cancelled", "Cancelled: cancelled")
     until(lambda: gone(child))
     assert sleeper.poll() is None
     with pytest.raises(Refused, match=f"job {st.id} is cancelled"):
@@ -113,6 +118,7 @@ def test_a_job_whose_op_fails_because_the_cancel_killed_its_child_is_cancelled(p
     st = jobs.wait(project, st.id, 20)
     assert (st.status, st.error) == ("cancelled", None)
     assert time.monotonic() - t0 < 5
+    assert last_log(project)["status"] == "cancelled"
 
 
 def test_a_job_deaf_inside_a_call_is_stopped_after_the_grace(project):
@@ -123,6 +129,8 @@ def test_a_job_deaf_inside_a_call_is_stopped_after_the_grace(project):
     st = jobs.wait(project, st.id, 20)
     assert (st.status, st.message) == ("cancelled", "stopped inside a call")
     assert time.monotonic() - t0 < 5
+    entry = last_log(project)
+    assert (entry["op"], entry["status"], entry["error"]) == ("test.steps", "cancelled", "stopped inside a call")
     until(lambda: gone(st.pid))
 
 

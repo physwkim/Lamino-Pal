@@ -67,10 +67,6 @@ class JobState(BaseModel):
         return self.status in ACTIVE
 
 
-class Cancelled(Exception):
-    """Raised in the op at its next progress call after SIGTERM."""
-
-
 def jobs_dir(project: Project) -> Path:
     return project.work_dir / "jobs"
 
@@ -210,7 +206,7 @@ def run(d: Path) -> int:
     def progress(frac: float, msg: str) -> None:
         nonlocal t_start
         if cancel_.is_set():
-            raise Cancelled("cancelled")
+            raise dispatch.Cancelled("cancelled")
         now = time.monotonic()
         # Each restart from 0 (after a GPU wait, a stack load) restarts the ETA.
         if frac <= 0:
@@ -222,18 +218,17 @@ def run(d: Path) -> int:
 
     def work() -> None:
         try:
-            r = dispatch.run_job(st.op, st.params, project=project, caller=st.caller, progress=progress)
+            r = dispatch.run_job(
+                st.op, st.params, project=project, caller=st.caller, progress=progress, cancelled=cancel_.is_set
+            )
             end.update(status="done", progress=1.0, eta_s=0.0, result=r.model_dump(mode="json"))
+        except dispatch.Cancelled:
+            end.update(status="cancelled")
+        except Refused as e:
+            end.update(status="failed", error=str(e))
         except BaseException as e:
-            if cancel_.is_set():
-                # SIGTERM reaches the op's children too, so whatever the op
-                # raises once it arrived is the cancel's doing.
-                end.update(status="cancelled")
-            elif isinstance(e, Refused):
-                end.update(status="failed", error=str(e))
-            else:
-                traceback.print_exc()
-                end.update(status="failed", error=f"{type(e).__name__}: {e}")
+            traceback.print_exc()
+            end.update(status="failed", error=f"{type(e).__name__}: {e}")
 
     _update(d, status="running")
     w = threading.Thread(target=work, name=f"job {st.id}")
@@ -244,6 +239,7 @@ def run(d: Path) -> int:
         if cancel_.is_set() and deadline is None:
             deadline = time.monotonic() + CANCEL_GRACE_S
         if deadline is not None and w.is_alive() and time.monotonic() >= deadline:
+            dispatch.abandon("cancelled", "stopped inside a call")
             _update(d, status="cancelled", message="stopped inside a call", finished=_now())
             sys.stdout.flush()
             os._exit(128 + signal.SIGTERM)

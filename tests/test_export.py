@@ -10,7 +10,7 @@ from test_align import _group
 from test_recon import _scan, run
 
 from lamino_pal import Refused, artifacts
-from lamino_pal.jobs import Cancelled
+from lamino_pal.dispatch import Cancelled
 from lamino_pal.ops import export
 from lamino_pal.project import ZBand
 
