@@ -17,7 +17,7 @@ from lamino_pal.render import png, to_u8, window
 
 TRUSTWORTHY = 8.0  # ring prominence, `align.rings`
 OPEN_ARC = "open arc — ring 무효 (README: 462–467, 40 px 오차)"
-TILT_FOCUS = "참고용: tilt에 따라 단조 증가하므로 판단 근거 아님"
+TILT_FOCUS = "참고용: tilt에 따른 경향이 run마다 달라 판단 근거 아님"
 
 
 def _opt(edit: qt.QLineEdit) -> float | None:

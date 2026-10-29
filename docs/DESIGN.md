@@ -326,7 +326,7 @@ tilt ✓, z-band ✓, 재구성 n/m. 상태는 project에서 계산하고 따로
    - **Tilt.** tilt 목록으로 job을 돌린다. tilt마다 best-focus slice를 grid 윗줄에,
      그 tilt의 xz plane(가운데 row, 전체 depth)을 아랫줄에 놓는다. tomoxide
      `lamino_tilt_scan`이 streaming 중에 xz를 모아 `TiltViews`로 넘긴다. focus curve는
-     "참고용: tilt에 따라 단조 증가하므로 판단 근거 아님"으로 표시하고, 결정은
+     "참고용: tilt에 따른 경향이 run마다 달라 판단 근거 아님"으로 표시하고, 결정은
      layer를 고르고 "Decide selected tilt"를 눌러 eye로 한다.
      ALIGNMENT §6의 실패 방법은 메뉴에 두지 않는다.
 4. **Preview**

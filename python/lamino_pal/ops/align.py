@@ -239,9 +239,10 @@ def tilt_scan(ctx: Context, p: TiltScanParams) -> TiltScanResult:
     """Reconstruct scan `tag` fully at each tilt and keep each one's best
     slice, inside the group's z band carried to that tilt, and its xz plane
     through the middle row. Decide the tilt by eye on the slices and xz planes
-    in `out`: the focus value grows with tilt on the 261003 sample and does not
-    pick it. Arrays in `out`: `best` [tilt, y, x], `xz` [tilt, z, x] and
-    `focus_by_z` [tilt, z], each tilt's first `depth` rows and NaN below them."""
+    in `out`: the focus value does not pick it, as on the 261003 sample it rose
+    from 16 to 24 degrees in one run and fell from 20 to 24 in the next. Arrays
+    in `out`: `best` [tilt, y, x], `xz` [tilt, z, x] and `focus_by_z`
+    [tilt, z], each tilt's first `depth` rows and NaN below them."""
     scan, path = scans.find(ctx.project, p.tag)
     group = scans.group_of(ctx.project, scan)
     c = _decided_center(scan, group, p.center_px)
