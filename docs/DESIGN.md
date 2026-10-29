@@ -68,21 +68,14 @@ op 비용 등급: **instant**(<0.2 s, 호출 스레드), **interactive**(수 초
 
 Lamino-Pal은 tomoxide 커밋에 pin된다(§8 submodule). 아래가 먼저 들어가야 한다.
 
-**T1 — align/recon 조립을 library로 (구조).** 지금 조립 로직이 CLI 바이너리에만
-있고 tomoxide-gui가 이미 복제했다. PyO3가 세 번째 사본이 되면 안 된다.
-
-- tilt→phi geometry: `tomoxide-cli/src/main.rs:903` `mk_geom`,
-  `tomoxide-gui/src/worker.rs:753`
-- Config→`ReconParams`: `main.rs:2045` `recon_params`, `worker.rs:610`
-- phase 조립: `main.rs:469` `build_phase`, `views/tune.rs:312`; stripe:
-  `main.rs:417` `build_stripe`
-- `run_align`(`main.rs:814`–1080), `grid`, 기본 slice 선택
-
-이것들을 `tomoxide::plan`(geometry, params, stripe/phase)과
-`tomoxide::align`(`AlignRequest` → `AlignReport{ring, sweep, verdict,
-tilt_focus}`, `CancelToken`·progress callback 인자)로 옮기고 CLI, tomoxide-gui,
-Lamino-Pal이 모두 이것을 부른다. 검증: 옮기기 전후 `tomoxide align` 출력이
-`step1000_bin2.h5`에서 같다.
+**T1 — align/recon 조립을 library로 (구조, 완료).** 조립 로직이 CLI 바이너리에만
+있었고 tomoxide-gui가 복제했다. PyO3가 세 번째 사본이 되면 안 된다. 지금
+Config→`ReconParams`/prep/algorithm은 `tomoxide::config::Config`(`recon_params`,
+`prep`, `algorithm`)에, sweep과 grid는 `tomoxide::align`(`PreppedStack`, `grid`)에
+있고 CLI와 core가 이것을 부른다. `tomoxide::align`은 v0.8.0에 있고, `Config`
+메서드(aa1d5e1)와 `PreppedStack` 재구성(47f44fd)은 branch `feat/stack-reconstruct`에
+있다. tomoxide-gui의 `worker.rs` `recon_params`와 `views/tune.rs` `build_phase`는
+아직 자기 사본이다.
 
 **T2 — lamino fourierrec y-flip.** USFFT divker2d가 tomocupy의 `n1-ty-1` 행을
 그대로 써서 linerec/fbp와 y가 뒤집혀 있었다. tomoxide `15808c6`에서 고쳤고 GUI는
@@ -187,8 +180,13 @@ group = "mountA"
 algorithm = "fourierrec"
 filter_name = "parzen"
 dtype = "float32"
-save_format = "h5"
 ```
+
+`[recon]`은 recipe(tomoxide `Config` 필드 표)의 기본값이다. scan, geometry,
+출력(`file_name`, `rotation_axis`, `lamino_angle`, `output`, `save_format`,
+`backend`)은 Lamino-Pal이 정하므로 recipe에 있으면 거부한다. 나머지는
+`_core.recipe_config`가 재구성과 같은 규칙으로 검사한다: `Config`에 없는 필드도
+거부한다(serde는 모르는 필드를 버리므로 오타가 기본값으로 돌게 된다).
 
 쓰기는 `Project.commit(mutation)` 하나다: flock → 다시 읽기 → 적용 → revision
 증가 → atomic rename. GUI는 `QFileSystemWatcher`로 다시 읽으므로 MCP 쪽 결정이
@@ -211,7 +209,8 @@ params와 출력 경로는 제출할 때 검사하고, 대기 중인 job과 같�
 - 완료 시 출력 h5에 `/lamino_pal/provenance`(center_px, tilt, params, source,
   tomoxide 버전, 명령줄)를 쓴다.
 - 출력 이름 규칙은 기존 것을 따른다:
-  `final_<tag>_bin<b>_c<center>_t<tilt>_<alg>_<filter>.h5`.
+  `final_<tag>_bin<b>_c<center>_t<tilt>_<alg>_<filter>.h5`. `<center>`는 bin과
+  상관없이 full-res `center_px`이다(`c1008p5`).
 
 **GPU.** GPU마다 `$XDG_RUNTIME_DIR/lamino-pal/gpu<N>.lock`을 exclusive flock으로
 잡는다. 기본값은 interactive = GPU 0, batch = GPU 1–3이고, 설정으로 바꾼다.
@@ -220,8 +219,8 @@ tomoxide는 CUDA 장치를 호출마다 `TOMOXIDE_CUDA_DEVICES`에서 읽으므�
 않는다. dispatcher는 그 GPU가 project의 interactive GPU일 때만 GPU op를 돌린다.
 job은 제출할 때 지금 비어 있고 대기 job이 없는 batch GPU를(없으면 대기가 가장
 적은 것을) 골라 그 env로 띄우고, job 프로세스는 그 GPU lock을 기다린다.
-`recon.run`은 scan 여러 개면 GPU당 scan 하나(run_finals.sh 방식), scan 하나면
-CLI의 multi-GPU shard를 쓴다.
+`recon.run` job 하나는 scan 하나를 GPU 하나에서 돌린다(run_finals.sh 방식). scan
+여러 개는 job 여러 개로 batch GPU에 나뉘고, CLI의 multi-GPU shard는 쓰지 않는다.
 
 ## 6. GUI (napari + silx)
 
@@ -253,8 +252,11 @@ TXM-Pal 구조를 따른다: `gui/ui/main.ui`(Designer), worker thread →
 - 3D에는 bin-4 볼륨(545×512×512, float32 0.57 GB)을 만들어 올린다. 최종 볼륨인
   bin-1 2180×2048×2048(36.6 GB)과 bin-2 1090×1024×1024(4.6 GB)는 GL 3D
   texture로 올리기에 너무 크다. 2D slice는 full-res를 dask로 lazy하게 연다.
-- viewer는 탭이 처음 보일 때 만든다. GL canvas는 Raw, Align, Preview, Volume에
-  하나씩이다.
+- viewer는 창을 만들 때 모두 만든다: Raw, Align, Preview에 하나, Volume에
+  넷(z, xz, yz, 3D). napari 0.6.6의 `QtViewer`는 layer가 둘 이상 든 model에
+  붙이면 KeyError를 내므로 model이 비어 있을 때 만들어야 한다.
+- job이 끝나면 모든 탭이 듣고, 탭은 자기가 보여 주는 op에만 반응한다. Volume은
+  Export의 op인 `export.bin`을 3D용으로 낸다.
 
 **레이아웃.**
 
@@ -278,39 +280,54 @@ tilt ✓, z-band ✓, 재구성 n/m. 상태는 project에서 계산하고 따로
    - napari: −log projection stack(θ 축 slider)과 θ readout.
    - 평균 projection.
    - range check 배지, drift 버튼, tilt-flow 버튼(결과 수치와 group tilt 비교).
+     drift와 tilt-flow 결과는 배지 없이 수치만 적는다.
 3. **Align**, 세 단계를 세로로:
    - **Rings.** ring center 선과 band별 marker를 그린다. prominence 배지는
      ≥ 8이면 녹색, 미만이면 황색이다. R = 180 scan은 비활성화하고 "open arc —
      ring 무효 (README: 462–467, 40 px 오차)"를 표시한 뒤 같은 group의 center를
      쓰자고 제안한다.
    - **Center.** sweep 결과의 score curve(silx)와 verdict 배지를 보여준다.
-     candidate slice는 napari grid mode에 candidate당 layer 하나로 놓는다. layer마다
-     자기 contrast를 쓴다. layer를 고르면 center가 정해진다. Ambiguous면 rival 두 개를 나란히 보여주고, Railed면 "범위 넓히기"
-     버튼을 낸다. 그 결과 slice가 비어 있으면(flat) z-band 경고를 띄운다.
-   - **Tilt.** tilt 목록으로 job을 돌린다. tilt마다 best-focus slice와 xz
-     ortho를 grid로 놓는다. focus curve는 "참고용: tilt에 따라 단조 증가하므로
-     판단 근거 아님"으로 표시하고, 결정은 panel 클릭(eye)으로 한다.
+     candidate slice는 napari grid mode에 candidate당 layer 하나로 놓고, layer마다
+     자기 contrast를 쓴다. Ambiguous면 best와 rival만 놓는다. curve를 클릭하면
+     가장 가까운 candidate layer가 골라진다. 결정은 layer를 고르고 "Decide
+     selected center"를 눌러서 한다(고르기만으로는 정하지 않는다). Railed면
+     "범위 넓히기" 버튼을 낸다. 그 결과 slice가 비어 있으면(flat) z-band 경고를
+     띄운다.
+   - **Tilt.** tilt 목록으로 job을 돌린다. tilt마다 best-focus slice를 grid로
+     놓는다(`align.tilt_scan` 결과에 xz가 없어서 xz ortho는 없다). focus curve는
+     "참고용: tilt에 따라 단조 증가하므로 판단 근거 아님"으로 표시하고, 결정은
+     layer를 고르고 "Decide selected tilt"를 눌러 eye로 한다.
      ALIGNMENT §6의 실패 방법은 메뉴에 두지 않는다.
 4. **Preview**
-   - algorithm/filter/stripe/phase로 단일 slice와 ortho를 미리 본다.
-   - slider로 바꿀 때 이전 요청은 취소된다(latest-wins).
+   - algorithm/filter/stripe/phase로 단일 slice와 ortho를 미리 본다. algorithm은
+     CUDA laminography가 받는 fourierrec, fbp, linerec 셋뿐이다.
+   - slider로 바꿀 때는 latest-wins다: 시작 전에 밀린 요청은 건너뛰고, 밀린
+     요청의 결과는 버린다. 이미 도는 요청은 끊지 않는다.
    - 비교 모드: variant를 추가하면 napari grid와 ROI 표(signal/noise ROI → CNR,
      noise σ; TXM-Pal `roiTableWidget` 방식)를 보여준다. ROI는 Shapes layer
      하나를 모든 variant에 공유한다.
    - even/odd split 버튼.
 5. **Batch**
    - group 결정 × scan 선택으로 계획된 명령 목록을 만든다(CLI 그대로 복사 가능).
-   - GPU 선택과 lock 상태, 실행/취소.
+   - batch GPU lock 상태, 실행/취소. 실행은 scan마다 job 하나이고 GPU는 제출 때
+     자동으로 고른다(§5). GPU 선택은 복사하는 명령의 `TOMOXIDE_CUDA_DEVICES`에만
+     쓰인다.
 6. **Volume**
    - h5를 dask로 lazy하게 열어 napari에 올린다(z slider). xz/yz ortho는 보조
      `QtViewer` 두 개로 보여 주고, `dims.events.current_step`으로 crosshair를
-     연동한다.
-   - focus-by-z curve(silx): z-wrap / air / sample 구간을 음영으로 표시하고,
-     sample band를 자동 제안한 뒤 사용자가 확정한다.
+     연동한다. 보조 viewer는 볼륨을 transpose해서 올리므로 slider가 곧 자기
+     축이다. 위치는 `[z, y, x]` 하나가 갖고, 그 값과 같은 step event는 무시한다
+     (napari는 한 step에 event를 여러 번 보낸다).
+   - focus-by-z curve(silx)에 peak와 band 경계 marker 두 개(끌어서 조정)를
+     그린다. 제안은 sample 구간 하나뿐이다: median-filter한 focus가 최대의 절반
+     이상인 가장 긴 구간이고, air와 z wrap은 따로 표시하지 않는다. 사용자가
+     확정한다.
    - valid FOV 원과 z 한계는 napari Shapes overlay로 그린다. window 기본값은
      p0.5/p99.5(`contrast_limits`)이다.
-   - 3D: 같은 viewer를 `ndisplay = 3`으로 바꾸고 bin-4 볼륨을 올린다. rendering은
-     mip / attenuated_mip / iso로, cut plane은 `depiction = "plane"`으로 고른다.
+   - 3D: 따로 둔 viewer page에 볼륨의 `export.bin` 결과 `<stem>_binned.h5`를
+     scale 2로 올린다(이미 bin된 볼륨이면 그 자신을 그대로). 없으면 "Bin 2×2×2
+     for 3D"가 그 job을 낸다. rendering은 mip / attenuated_mip / translucent / iso / average /
+     minip로, cut plane은 `depiction = "plane"`으로 고른다.
 7. **Export**
    - z 범위 기본값은 group z-band이다. 16-bit window histogram 미리보기(silx),
      bin 출력.
@@ -407,6 +424,10 @@ maturin develop --release --features cuda
 cargo build --release --features cuda --manifest-path lib/tomoxide/Cargo.toml -p tomoxide-cli
 ```
 
+CLI와 MCP 서버는 Qt 없이 돈다. GUI 의존성(pyside6, silx, napari, dask,
+pyopengl)은 extra `gui`이고(`pip install '.[gui]'`), 실행은
+`lamino-pal-gui [--project PATH]` 또는 `python -m lamino_pal.gui`이다.
+
 core와 CLI가 같은 submodule 커밋에서 빌드되므로, preview(프로세스 안)와
 batch(CLI)의 geometry가 같은 코드다. job마다 `tomoxide --version`을 로그에
 남긴다.
@@ -433,9 +454,14 @@ skip이 아니라 실패로 처리한다.
     `final_step1000_bin1_c1008p5_t20_fourierrec_parzen.h5`와 비교.
 - MCP e2e: stdio client로 rings → sweep → preview → `recon.run` job →
   `job_wait`/`job_cancel`. 이미지 content가 오는지 확인한다.
-- GUI smoke: `QT_QPA_PLATFORM=offscreen`, project 열기, instant op 하나,
-  job dock 갱신, napari layer 추가와 `ndisplay` 전환. offscreen에는 GL이 없으므로
+- GUI(`tests/test_gui.py`, `QT_QPA_PLATFORM=offscreen`, `QT_API=pyside6`): op마다
+  action, None을 받는 필수 param, latest-wins, 상단 bar의 결정 출처와 다음 탭,
+  instant op figure와 job 끝, Volume slider 한 번에 동기화 한 번과 3D 볼륨,
+  Export z 범위가 band를 따르고 손으로 고친 값은 유지. offscreen에는 GL이 없으므로
   렌더링 결과(screenshot)는 실제 display가 있는 시험에서만 본다.
+- pytest는 `lamino_pal`에서 나는 DeprecationWarning만 오류로 만든다. GUI
+  stack(napari, npe2, app_model, matplotlib)이 import 때 내는 경고는 우리 것이
+  아니어서 그 범위 밖이다.
 
 ## 10. 마일스톤
 
@@ -450,4 +476,6 @@ skip이 아니라 실패로 처리한다.
 
 ## 11. 결정 필요
 
-1. **T1을 physwkim/tomoxide에 먼저 넣는지.** Lamino-Pal M3 이후는 T1에 의존한다.
+1. **tomoxide `feat/stack-reconstruct`(aa1d5e1, 47f44fd)를 physwkim/tomoxide에
+   넣는지.** submodule이 그 branch의 47f44fd에 pin되어 있어, push 전에는 다른 곳에서
+   clone하면 submodule을 받을 수 없다.
