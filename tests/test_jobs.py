@@ -134,6 +134,15 @@ def test_cancel_refuses_a_pid_that_is_not_the_jobs(project, sleeper):
     assert jobs.wait(project, st.id, 20).status == "cancelled"
 
 
+def test_a_job_cancelled_before_its_process_runs_it_is_cancelled(project, monkeypatch):
+    # A job process that has not reached `jobs.run`, where it hears SIGTERM.
+    monkeypatch.setattr(jobs, "COMMAND", [sys.executable, "-c", "import time; time.sleep(60)"])
+    st = jobs.submit(project, "test.steps", {"n": 1}, "cli")
+    assert jobs.cancel(project, st.id).cancel_sent is not None
+    st = jobs.wait(project, st.id, 20)
+    assert (st.status, st.message, st.error) == ("cancelled", "stopped before it ran", None)
+
+
 def test_a_job_process_that_dies_is_marked_failed(project):
     st = jobs.submit(project, "test.steps", {"n": 1, "dt": 60}, "cli")
     until(lambda: jobs.get(project, st.id).status == "running")

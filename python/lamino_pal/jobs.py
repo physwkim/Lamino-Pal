@@ -60,6 +60,7 @@ class JobState(BaseModel):
     proc_start: int | None = None  # its /proc starttime, against pid reuse
     result: dict[str, Any] | None = None
     error: str | None = None
+    cancel_sent: str | None = None  # when `cancel` signalled the process
 
     @property
     def active(self) -> bool:
@@ -143,18 +144,18 @@ def _dir(project: Project, jid: str) -> Path:
 
 def get(project: Project, jid: str) -> JobState:
     """Job `jid`'s state; one whose process is gone without a result is
-    marked failed."""
+    marked failed, or cancelled when the cancel killed it before it ran."""
     d = _dir(project, jid)
     with _lock(d):
         st = _read(d)
         if st.active and st.pid is not None and not _alive(st):
-            st = st.model_copy(
-                update={
-                    "status": "failed",
-                    "error": f"the job process ended without a result; see {d / 'out.log'}",
-                    "finished": _now(),
-                }
-            )
+            # The process records every end it lives through, but SIGTERM
+            # kills it outright until `run` installs its handler.
+            if st.status == "queued" and st.cancel_sent is not None:
+                end = {"status": "cancelled", "message": "stopped before it ran"}
+            else:
+                end = {"status": "failed", "error": f"the job process ended without a result; see {d / 'out.log'}"}
+            st = st.model_copy(update={**end, "finished": _now()})
             _write(d, st)
     return st
 
@@ -193,6 +194,8 @@ def cancel(project: Project, jid: str) -> JobState:
             os.killpg(st.pid, signal.SIGTERM)
         except ProcessLookupError:
             raise Refused(f"job {jid}'s process {st.pid} is not running") from None
+        st = st.model_copy(update={"cancel_sent": _now()})
+        _write(d, st)
     return st
 
 
