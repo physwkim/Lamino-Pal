@@ -41,6 +41,7 @@ FIXED = {
     "job_result",
     "gui_state",
     "gui_show_tab",
+    "gui_select",
     "gui_view",
     "gui_graph",
 }

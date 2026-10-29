@@ -3,6 +3,8 @@ files no scan claims and the artifacts below."""
 
 from __future__ import annotations
 
+from typing import Iterator
+
 from silx.gui import qt
 
 from lamino_pal.ops.volume import provenance
@@ -73,14 +75,29 @@ class ProjectTree(qt.QObject):
         items = self.tree.selectedItems()
         return _key(items[0]) if items else None
 
+    def keys(self, kind: str) -> list[str]:
+        """The values of the tree's `kind` items, in tree order."""
+        return [k[1] for k in map(_key, self._items()) if k is not None and k[0] == kind]
+
+    def pick(self, key: tuple[str, str]) -> None:
+        """Select `key`'s item alone and emit `selected`, as a click does,
+        also when it was selected already."""
+        item = next(i for i in self._items() if _key(i) == key)
+        self.tree.blockSignals(True)
+        self.tree.setCurrentItem(item)
+        self.tree.blockSignals(False)
+        self.selected.emit(*key)
+
     def _select(self, key: tuple[str, str]) -> None:
-        todo = [self.tree.topLevelItem(i) for i in range(self.tree.topLevelItemCount())]
-        while todo:
-            item = todo.pop()
-            if _key(item) == key:
-                item.setSelected(True)
-                return
-            todo += [item.child(i) for i in range(item.childCount())]
+        item = next((i for i in self._items() if _key(i) == key), None)
+        if item is not None:
+            item.setSelected(True)
+
+    def _items(self, parent: qt.QTreeWidgetItem | None = None) -> Iterator[qt.QTreeWidgetItem]:
+        parent = self.tree.invisibleRootItem() if parent is None else parent
+        for i in range(parent.childCount()):
+            yield parent.child(i)
+            yield from self._items(parent.child(i))
 
     @staticmethod
     def _item(parent, label: str, key: tuple[str, str] | None) -> qt.QTreeWidgetItem:

@@ -26,6 +26,7 @@ from lamino_pal.gui import status
 from lamino_pal.gui.actions import ACTIONS, RunOpDialog
 from lamino_pal.gui.form import ParamsForm
 from lamino_pal.gui.runner import Runner, by_hand
+from lamino_pal.gui.tree import _key
 from lamino_pal.gui.viewer import Viewer
 from lamino_pal.jobs import JobState
 from lamino_pal.ops import REGISTRY
@@ -215,6 +216,27 @@ def test_an_agent_shows_a_tab_and_zooms_a_viewer_and_a_graph(app, win):
         _remote(app, win, "graph", tab="Align", graph="FRC")
     with pytest.raises(LaminoPalError, match="^unknown command zoom"):
         _remote(app, win, "zoom")
+
+
+def test_an_agent_selects_a_tree_item_as_a_click_does(app, win):
+    st = _remote(app, win, "select", kind="volume", value="v.h5")
+    assert st["tab"] == "Volume" and st["context"] == {"group": "m", "tag": "s", "volume": "v.h5"}
+    assert [win.tree.current()] == [_key(i) for i in win.treeProject.selectedItems()] == [("volume", "v.h5")]
+    win.set_context(volume=None)
+    # Selected already, it is selected again.
+    assert _remote(app, win, "select", kind="volume", value="v.h5")["context"]["volume"] == "v.h5"
+    st = _remote(app, win, "select", kind="group", value="m")
+    assert st["context"] == {"group": "m", "tag": "s", "volume": "v.h5"}
+    assert [_key(i) for i in win.treeProject.selectedItems()] == [("group", "m")]
+    with pytest.raises(LaminoPalError, match="^the project tree has no volume w.h5; volumes: v.h5, s.h5$"):
+        _remote(app, win, "select", kind="volume", value="w.h5")
+
+
+def test_an_agent_is_refused_a_viewer_or_graph_that_shows_nothing(app, win):
+    with pytest.raises(LaminoPalError, match="^Align's viewer align shows nothing yet$"):
+        _remote(app, win, "view", tab="Align", viewer="align", zoom=2.0)
+    with pytest.raises(LaminoPalError, match="^Align's graph focus shows nothing yet$"):
+        _remote(app, win, "graph", tab="Align", graph="focus", reset=True)
 
 
 def test_status_names_how_each_field_was_decided_and_the_next_tab(scene):

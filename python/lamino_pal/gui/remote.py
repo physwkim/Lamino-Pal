@@ -1,6 +1,6 @@
 """What an agent may do to the window through `lamino_pal.remote`: show a
-tab, set a viewer's camera, set a graph's limits. Each command runs on the Qt
-thread and returns what it left."""
+tab, select a project tree item, set a viewer's camera, set a graph's limits.
+Each command runs on the Qt thread and returns what it left."""
 
 from __future__ import annotations
 
@@ -25,6 +25,8 @@ def _viewer(win, tab: str, viewer: str) -> Viewer:
     v = next((v for v in t.viewers if v.model.title == viewer), None)
     if v is None:
         raise LaminoPalError(f"{tab} has no viewer {viewer}; viewers: {', '.join(v.model.title for v in t.viewers)}")
+    if not v.model.layers:
+        raise LaminoPalError(f"{tab}'s viewer {viewer} shows nothing yet")
     return v
 
 
@@ -33,6 +35,8 @@ def _graph(win, tab: str, graph: str) -> PlotWidget:
     p = t.graphs.get(graph)
     if p is None:
         raise LaminoPalError(f"{tab} has no graph {graph}; graphs: {', '.join(t.graphs)}")
+    if not p.getItems():
+        raise LaminoPalError(f"{tab}'s graph {graph} shows nothing yet")
     return p
 
 
@@ -51,6 +55,15 @@ def state(win) -> dict[str, Any]:
 
 def show_tab(win, tab: str) -> dict[str, Any]:
     win.show_tab(_tab(win, tab).NAME)
+    return state(win)
+
+
+def select(win, kind: str, value: str) -> dict[str, Any]:
+    """Select `kind` `value` in the project tree as the user's click does."""
+    keys = win.tree.keys(kind)
+    if value not in keys:
+        raise LaminoPalError(f"the project tree has no {kind} {value}; {kind}s: {', '.join(keys)}")
+    win.tree.pick((kind, value))
     return state(win)
 
 
@@ -84,7 +97,7 @@ def graph(
     return {"x": list(p.getXAxis().getLimits()), "y": list(p.getYAxis().getLimits())}
 
 
-COMMANDS = {"state": state, "show_tab": show_tab, "view": view, "graph": graph}
+COMMANDS = {"state": state, "show_tab": show_tab, "select": select, "view": view, "graph": graph}
 
 
 def serve(win) -> remote.Server:

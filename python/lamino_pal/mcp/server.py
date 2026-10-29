@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from importlib.resources import files
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import anyio
 import anyio.from_thread
@@ -46,7 +46,7 @@ Laminography reconstruction of PLS-II BL7C scans on tomoxide. Every analysis
 op is a tool; a job op returns a job_id to follow with job_wait and
 job_result. Read lamino://guide/alignment before aligning a mount group.
 With a GUI open on the project, the gui_ tools show its user what you mean:
-a tab, a viewer's zoom, a graph's range."""
+a tab, a group, scan or volume, a viewer's zoom, a graph's range."""
 
 
 class Session:
@@ -302,6 +302,15 @@ def build(project: Project | None) -> MCPServer:
         return await anyio.to_thread.run_sync(gui, "show_tab", {"tab": tab})
 
     @server.tool()
+    async def gui_select(kind: Literal["group", "scan", "volume", "artifact"], value: str) -> dict[str, Any]:
+        """Select item `value` of kind `kind` in the GUI's project tree, as
+        the user's click does: a group (by name), a scan (by tag), a volume
+        or an artifact (by path in the work directory). A volume opens the
+        Volume tab, an artifact the tab of the job that wrote it. Returns
+        gui_state."""
+        return await anyio.to_thread.run_sync(gui, "select", {"kind": kind, "value": value})
+
+    @server.tool()
     async def gui_view(
         tab: str,
         viewer: str,
@@ -313,7 +322,8 @@ def build(project: Project | None) -> MCPServer:
         """Set the camera of viewer `viewer` of GUI tab `tab`: fit the data to
         it first when `fit`, then set zoom (screen pixels per data pixel),
         center ([y, x], or [z, y, x] in 3D, in data pixels) and the 3D view's
-        angles (degrees). Returns the camera."""
+        angles (degrees). Returns the camera; refused while the viewer shows
+        nothing."""
         args = {"tab": tab, "viewer": viewer, "zoom": zoom, "center": center, "angles": angles, "fit": fit}
         return await anyio.to_thread.run_sync(gui, "view", args)
 
@@ -327,7 +337,7 @@ def build(project: Project | None) -> MCPServer:
     ) -> dict[str, Any]:
         """Zoom graph `graph` of GUI tab `tab`: autoscale it first when
         `reset`, then set the x and y axis ranges [lo, hi]. Returns the
-        ranges."""
+        ranges; refused while the graph shows nothing."""
         args = {"tab": tab, "graph": graph, "x": x, "y": y, "reset": reset}
         return await anyio.to_thread.run_sync(gui, "graph", args)
 
