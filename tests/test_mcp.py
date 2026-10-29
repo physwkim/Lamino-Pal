@@ -96,6 +96,20 @@ async def test_every_registry_op_is_a_tool_named_with_underscores(project):
     assert FIXED <= names
 
 
+async def test_a_tuple_params_order_is_in_its_tool_schema(project):
+    async with Client(build(project)) as c:
+        tools = {t.name: t.input_schema["properties"] for t in (await c.list_tools()).tools}
+
+    def described(prop):
+        return [arm["description"] for arm in prop["anyOf"] if "description" in arm]
+
+    for rect in ("signal", "background"):
+        assert described(tools["recon_compare"][rect]) == [
+            "(y0, y1, x0, x1): rows [y0, y1) and columns [x0, x1) of the slice"
+        ]
+    assert described(tools["export_tiff16"]["z"]) == ["slices [z0, z1)"]
+
+
 async def test_an_op_returns_its_result_and_is_logged_as_the_agents(project):
     async with Client(build(project)) as c:
         await c.call_tool("log_tail", {})

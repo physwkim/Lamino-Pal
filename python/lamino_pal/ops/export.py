@@ -14,7 +14,7 @@ from typing import Annotated, Any, Callable, Iterator
 import h5py
 import numpy as np
 import tifffile
-from pydantic import AfterValidator
+from pydantic import AfterValidator, Field
 
 from lamino_pal import Refused, scans, units
 from lamino_pal.artifacts import save_h5, written
@@ -34,12 +34,12 @@ def _range(z: tuple[int, int]) -> tuple[int, int]:
     return z
 
 
-ZRange = Annotated[tuple[int, int], AfterValidator(_range)]
+ZRange = Annotated[tuple[int, int], AfterValidator(_range), Field(description="slices [z0, z1)")]
 
 
 class RangeParams(Params):
     volume: InPath  # h5 with exchange/data [z, y, x]
-    z: ZRange | None = None  # slices [z0, z1); default: the group's z_band
+    z: ZRange | None = None  # default: the group's z_band
 
 
 def _bind_z(p: RangeParams, project: Project) -> RangeParams:

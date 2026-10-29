@@ -53,7 +53,11 @@ def _rect(r: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
     return r
 
 
-Rect = Annotated[tuple[int, int, int, int], AfterValidator(_rect)]
+Rect = Annotated[
+    tuple[int, int, int, int],
+    AfterValidator(_rect),
+    Field(description="(y0, y1, x0, x1): rows [y0, y1) and columns [x0, x1) of the slice"),
+]
 
 
 class Setup(Params):
@@ -162,7 +166,7 @@ class RecipesParams(Setup, Where, OutputParams):
     # Each variant's fields laid over the recipe. Paganin is not a default: its
     # pixel size, distance and energy belong to the data.
     variants: list[Recipe] = Field(default_factory=lambda: [dict(v) for v in DEFAULT_VARIANTS], min_length=1)
-    signal: Rect | None = None  # (y0, y1, x0, x1) of the slice
+    signal: Rect | None = None
     background: Rect | None = None
     out: OptOutPath = None  # default artifacts/<tag>_recipes_c<center>_t<tilt>.h5
 
