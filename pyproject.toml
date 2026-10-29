@@ -9,9 +9,14 @@ description = "BL7C laminography reconstruction GUI and MCP server on tomoxide"
 requires-python = ">=3.12"
 dependencies = ["numpy", "h5py", "pydantic>=2", "tomli-w", "tifffile", "mcp>=2.3,<3", "pillow", "matplotlib"]
 
+[project.optional-dependencies]
+# The CLI and the MCP server run without Qt.
+gui = ["pyside6", "silx>=2.1", "napari>=0.6", "dask", "pyopengl"]
+
 [project.scripts]
 lamino-pal = "lamino_pal.cli:main"
 lamino-pal-mcp = "lamino_pal.mcp.server:main"
+lamino-pal-gui = "lamino_pal.gui.app:main"
 
 [tool.maturin]
 python-source = "python"
@@ -24,3 +29,5 @@ testpaths = ["tests"]
 # napari's pytest plugins import napari into every run.
 addopts = "-p no:napari -p no:npe2 -p no:napari-plugin-engine"
 markers = ["golden: imports LAMINO_PAL_DATA and compares with the 261003 h5 files"]
+# Ours only: the GUI stack imports dependencies that still warn on import.
+filterwarnings = ["error::DeprecationWarning:lamino_pal"]

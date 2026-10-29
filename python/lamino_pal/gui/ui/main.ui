@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1600</width>
+    <height>1000</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Lamino-Pal</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="layoutCentral">
+    <item>
+     <widget class="QFrame" name="frameGroupStatus">
+      <layout class="QHBoxLayout" name="layoutGroupStatus">
+       <item>
+        <widget class="QLabel" name="labelGroup">
+         <property name="text">
+          <string>no group</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelCenter"/>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelTilt"/>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelZBand"/>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelRecon"/>
+       </item>
+       <item>
+        <spacer name="spacerGroupStatus">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pushButtonConfirm">
+         <property name="text">
+          <string>Confirm agent decisions</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pushButtonNext">
+         <property name="text">
+          <string>Next</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QSplitter" name="splitterMain">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <widget class="QTreeWidget" name="treeProject">
+       <property name="headerHidden">
+        <bool>true</bool>
+       </property>
+       <column>
+        <property name="text">
+         <string>Project</string>
+        </property>
+       </column>
+      </widget>
+      <widget class="QTabWidget" name="tabWidget">
+       <widget class="QWidget" name="tabData">
+        <attribute name="title">
+         <string>Data</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="layoutData"/>
+       </widget>
+       <widget class="QWidget" name="tabRaw">
+        <attribute name="title">
+         <string>Raw</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="layoutRaw"/>
+       </widget>
+       <widget class="QWidget" name="tabAlign">
+        <attribute name="title">
+         <string>Align</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="layoutAlign"/>
+       </widget>
+       <widget class="QWidget" name="tabPreview">
+        <attribute name="title">
+         <string>Preview</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="layoutPreview"/>
+       </widget>
+       <widget class="QWidget" name="tabBatch">
+        <attribute name="title">
+         <string>Batch</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="layoutBatch"/>
+       </widget>
+       <widget class="QWidget" name="tabVolume">
+        <attribute name="title">
+         <string>Volume</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="layoutVolume"/>
+       </widget>
+       <widget class="QWidget" name="tabExport">
+        <attribute name="title">
+         <string>Export</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="layoutExport"/>
+       </widget>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>&amp;File</string>
+    </property>
+    <addaction name="actionOpen"/>
+    <addaction name="separator"/>
+    <addaction name="actionQuit"/>
+   </widget>
+   <widget class="QMenu" name="menuTools">
+    <property name="title">
+     <string>&amp;Tools</string>
+    </property>
+    <addaction name="actionRunOp"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuTools"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <widget class="QDockWidget" name="dockParams">
+   <property name="windowTitle">
+    <string>Parameters</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>2</number>
+   </attribute>
+   <widget class="QStackedWidget" name="stackParams"/>
+  </widget>
+  <widget class="QDockWidget" name="dockJobs">
+   <property name="windowTitle">
+    <string>Jobs</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>8</number>
+   </attribute>
+   <widget class="QWidget" name="dockJobsContents">
+    <layout class="QVBoxLayout" name="layoutJobs"/>
+   </widget>
+  </widget>
+  <widget class="QDockWidget" name="dockLog">
+   <property name="windowTitle">
+    <string>Log</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>8</number>
+   </attribute>
+   <widget class="QWidget" name="dockLogContents">
+    <layout class="QVBoxLayout" name="layoutLog"/>
+   </widget>
+  </widget>
+  <action name="actionOpen">
+   <property name="text">
+    <string>&amp;Open project…</string>
+   </property>
+  </action>
+  <action name="actionQuit">
+   <property name="text">
+    <string>&amp;Quit</string>
+   </property>
+  </action>
+  <action name="actionRunOp">
+   <property name="text">
+    <string>&amp;Run op…</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
