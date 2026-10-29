@@ -433,7 +433,7 @@ job state를 돌려준다. Codex 기본 `tool_timeout_sec` 60보다 짧게 잡�
 ```sh
 claude mcp add lamino-pal --scope user -- \
   micromamba run -n lamino-pal lamino-pal-mcp \
-  --project /home/stevek/work/261003_Lamino_test/lamino_pal/project.toml
+  --project /home/stevek/work/lamino_pal_261003/project.toml
 ```
 
 (또는 저장소 `.mcp.json`). Codex `~/.codex/config.toml`:
@@ -442,7 +442,7 @@ claude mcp add lamino-pal --scope user -- \
 [mcp_servers.lamino-pal]
 command = "micromamba"
 args = ["run", "-n", "lamino-pal", "lamino-pal-mcp",
-        "--project", "/home/stevek/work/261003_Lamino_test/lamino_pal/project.toml"]
+        "--project", "/home/stevek/work/lamino_pal_261003/project.toml"]
 startup_timeout_sec = 30
 tool_timeout_sec = 60
 ```
