@@ -104,6 +104,17 @@ def test_cancel_stops_the_job_and_its_process_group_only(project, sleeper):
         jobs.cancel(project, st.id)
 
 
+def test_a_job_whose_op_fails_because_the_cancel_killed_its_child_is_cancelled(project):
+    # As recon.run's build of the tomoxide CLI fails when cargo dies.
+    st = jobs.submit(project, "test.steps", {"n": 1, "child_step": True}, "cli")
+    until((project.work_dir / "artifacts/steps1.txt.child").exists)
+    t0 = time.monotonic()
+    jobs.cancel(project, st.id)
+    st = jobs.wait(project, st.id, 20)
+    assert (st.status, st.error) == ("cancelled", None)
+    assert time.monotonic() - t0 < 5
+
+
 def test_a_job_deaf_inside_a_call_is_stopped_after_the_grace(project):
     st = jobs.submit(project, "test.steps", {"n": 1, "dt": 60}, "cli")
     until(lambda: jobs.get(project, st.id).status == "running")

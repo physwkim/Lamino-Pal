@@ -224,13 +224,16 @@ def run(d: Path) -> int:
         try:
             r = dispatch.run_job(st.op, st.params, project=project, caller=st.caller, progress=progress)
             end.update(status="done", progress=1.0, eta_s=0.0, result=r.model_dump(mode="json"))
-        except Cancelled:
-            end.update(status="cancelled")
-        except Refused as e:
-            end.update(status="failed", error=str(e))
         except BaseException as e:
-            traceback.print_exc()
-            end.update(status="failed", error=f"{type(e).__name__}: {e}")
+            if cancel_.is_set():
+                # SIGTERM reaches the op's children too, so whatever the op
+                # raises once it arrived is the cancel's doing.
+                end.update(status="cancelled")
+            elif isinstance(e, Refused):
+                end.update(status="failed", error=str(e))
+            else:
+                traceback.print_exc()
+                end.update(status="failed", error=f"{type(e).__name__}: {e}")
 
     _update(d, status="running")
     w = threading.Thread(target=work, name=f"job {st.id}")

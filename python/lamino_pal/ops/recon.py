@@ -460,8 +460,6 @@ def run(ctx: Context, p: RunParams) -> RunResult:
                 proc.kill()
                 proc.wait()
         if rc != 0:
-            # A cancel reached the CLI too, through the job's process group.
-            ctx.progress(0.05 + 0.95 * done[0] / done[1], f"tomoxide recon exited {rc}")
             raise LaminoPalError(f"tomoxide recon exited {rc}:\n" + "\n".join(tail))
         with h5py.File(part_h5, "r+") as f:
             shape = f["exchange/data"].shape

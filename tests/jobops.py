@@ -15,6 +15,7 @@ class StepsParams(OutputParams):
     dt: float = Field(0.05, ge=0)
     fail_at: int | None = None
     child: bool = False  # start `sleep 60` in the job's process group; its pid in out.child
+    child_step: bool = False  # first wait on `sleep 60`, failing if it fails; its pid in out.child
     out: OptOutPath = None
 
 
@@ -30,6 +31,11 @@ def _steps(ctx, p):
     child = subprocess.Popen(["sleep", "60"]).pid if p.child else None
     if child:
         Path(p.out + ".child").write_text(str(child))
+    if p.child_step:
+        proc = subprocess.Popen(["sleep", "60"])
+        Path(p.out + ".child").write_text(str(proc.pid))
+        if proc.wait() != 0:
+            raise RuntimeError(f"sleep exited {proc.returncode}")
     for i in range(p.n):
         if i == p.fail_at:
             raise RuntimeError(f"failed at step {i}")
