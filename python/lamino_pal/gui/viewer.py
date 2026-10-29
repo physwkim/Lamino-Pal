@@ -14,7 +14,33 @@ from silx.gui import qt
 class _Canvas(VispyCanvas):
     """napari 0.6.6's canvas, made on a model that may already hold layers:
     it reorders and regrids every layer of the model as each one is mapped,
-    a KeyError until the last is, so it waits for that."""
+    a KeyError until the last is, so it waits for that.
+
+    A fit (fit_to_view: napari's on the first layer and on ndisplay, or
+    reset_view) is to the size the canvas last had, napari's default 800×600
+    before it was made, so it is made again as the canvas is resized until
+    it is next drawn shown."""
+
+    _unfit = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._unfit = True
+        self.viewer.events.reset_view.connect(self._fitted)
+        # Painted: napari calls on_draw itself as layers change.
+        self._scene_canvas.events.draw.connect(self._drawn)
+
+    def _fitted(self, event=None) -> None:
+        self._unfit = True
+
+    def _drawn(self, event) -> None:
+        if self.native.isVisible():
+            self._unfit = False
+
+    def on_resize(self, event) -> None:
+        super().on_resize(event)
+        if self._unfit and self.viewer.layers:
+            self.viewer.fit_to_view()
 
     def _mapped(self) -> bool:
         return all(layer in self.layer_to_visual for layer in self.viewer.layers)

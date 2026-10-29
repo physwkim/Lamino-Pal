@@ -272,7 +272,11 @@ TXM-Pal 구조를 따른다: `gui/ui/main.ui`(Designer), worker thread →
   붙이면 layer마다 model 전체를 다시 정렬하다 KeyError를 내므로, 마지막 layer가
   붙을 때까지 정렬을 미루는 canvas(`viewer._Canvas`)를 쓴다. layer controls와
   3D camera depth는 layer가 들어올 때만 만들어지므로, 이미 든 layer 몫은
-  `Viewer.qt_viewer`가 만든다.
+  `Viewer.qt_viewer`가 만든다. napari의 fit(`fit_to_view`: 첫 layer, ndisplay
+  전환, `reset_view`)은 canvas의 마지막 크기에 맞추고 canvas가 생기기 전에는
+  그 크기가 기본값 800×600이다. 그래서 `_Canvas`는 fit 뒤 보이는 채로 처음
+  그려질 때까지 크기가 바뀔 때마다 다시 fit한다; 그러지 않으면 숨은 탭에서 연
+  볼륨의 xz/yz 단면이 잘린다.
 - job이 끝나면 모든 탭이 듣고, 탭은 자기가 보여 주는 op에만 반응한다. Volume은
   Export의 op인 `export.bin`을 3D용으로 낸다.
 

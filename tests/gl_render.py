@@ -3,6 +3,7 @@ drawn, never mapped."""
 
 import os
 
+import h5py
 import numpy as np
 import PySide6.QtCore  # noqa: F401  # silx takes the binding napari's qtpy is pinned to
 import pytest
@@ -43,7 +44,9 @@ def test_a_canvas_made_over_layers_draws_as_one_that_heard_them_inserted(app, nd
         pump(app, 0.2)
         for i in range(0 if before else 3):
             v.model.add_image(data[i], name=f"c {i}", contrast_limits=(0, 1))
-        v.model.reset_view()
+        if not before:
+            # napari fits on the first layer only.
+            v.model.reset_view()
         pump(app, 0.2)
         img = drawn(v)
         v.close_canvas()
@@ -58,3 +61,43 @@ def test_a_canvas_made_over_layers_draws_as_one_that_heard_them_inserted(app, nd
     else:
         assert img[h // 2, w // 2] > 0 and img[h // 10, w // 10] == 0
     assert np.array_equal(img, made(False))
+
+
+def fill(img: np.ndarray) -> tuple[float, float]:
+    """The height and width of what `img` shows on its black ground, as
+    fractions of its own."""
+    rows, cols = np.flatnonzero(img.any(1)), np.flatnonzero(img.any(0))
+    h, w = img.shape
+    return (rows[-1] - rows[0] + 1) / h, (cols[-1] - cols[0] + 1) / w
+
+
+def test_every_volume_view_is_fit_to_the_canvas_it_is_drawn_on(app, project):
+    from lamino_pal.gui.window import MainWindow
+
+    vol = np.ones((40, 64, 64), "f4")
+    vol[:, 40:48, 8:16] = 0  # the window's low end, inside the z plane
+    for name, v in (("v.h5", vol), ("v_binned.h5", vol[::2, ::2, ::2])):
+        with h5py.File(project.work_dir / name, "w") as f:
+            f["exchange/data"] = v
+            f.require_group("lamino_pal/provenance").attrs.update(tag="s", bin=2)
+    w = MainWindow(project)
+    w.resize(1600, 1000)
+    w.setAttribute(qt.Qt.WA_DontShowOnScreen)
+    w.show()
+    pump(app, 0.3)
+    # The planes are added to viewers whose canvases are not made yet.
+    w._select("volume", "v.h5")
+    w.show_tab("Volume")
+    pump(app, 0.5)
+    vt = w.tabs["Volume"]
+    vt.pages.setCurrentIndex(1)
+    pump(app, 0.5)
+    try:
+        for name, v in (*vt.views.items(), ("3D", vt.view3d)):
+            # The lines over the planes are coloured, the planes gray.
+            img = v.qt_viewer.screenshot(flash=False)[..., :3].min(-1) > 60
+            # napari's fit: 95% of the canvas on the axis the data fills most.
+            assert 0.93 < max(fill(img)) < 0.97, (name, fill(img), img.shape)
+    finally:
+        w.close()
+        pump(app, 0.3)
