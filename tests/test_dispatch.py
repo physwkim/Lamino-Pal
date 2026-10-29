@@ -112,6 +112,34 @@ def test_omitted_output_path_takes_the_default_name(project, monkeypatch):
     assert r.path == str(project.work_dir / "b.h5")
 
 
+class BoundParams(OutputParams):
+    tag: str
+    level: int | None = None  # default: the project's recon.level
+    out: OptOutPath = None
+
+
+def test_bind_freezes_project_defaults_before_naming_the_output(project, monkeypatch):
+    def bind(p, project):
+        return p if p.level is not None else p.model_copy(update={"level": project.data.recon["level"]})
+
+    o = build(
+        "test.bound",
+        cost="instant",
+        params=BoundParams,
+        result=WriteResult,
+        fn=_write,
+        default_out=lambda p: {"out": f"{p.tag}_{p.level}.h5"},
+        bind=bind,
+    )
+    project.commit(lambda f: f.recon.update(level=1))
+    p = dispatch.validate(o, {"tag": "a"}, project)
+    assert (p.level, p.out) == (1, str(project.work_dir / "a_1.h5"))
+    # A job validates its stored params again when it starts.
+    project.commit(lambda f: f.recon.update(level=2))
+    again = dispatch.validate(o, p.model_dump(mode="json"), project)
+    assert (again.level, again.out) == (1, p.out)
+
+
 def test_registration_requires_default_out_for_an_optional_output():
     with pytest.raises(TypeError, match="default_out"):
         build("test.bad", cost="instant", params=NamedParams, result=Result, fn=_write)

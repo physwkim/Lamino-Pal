@@ -149,7 +149,9 @@ lamino_pal/
 요약, artifact, 소요 시간, caller=gui|mcp|cli, tomoxide 버전)을 한다. 기록이
 dispatcher 안에 있으므로 어떤 op도 로그를 건너뛸 수 없다. 생략할 수 있는 출력
 경로(`OptOutPath`)는 op의 `default_out`이 params로 이름을 짓고(예: §5의
-`final_…` 규칙), 그 이름도 같은 경로 검사를 거친다.
+`final_…` 규칙), 그 이름도 같은 경로 검사를 거친다. project가 정하는 기본값(group의
+center와 tilt, `[recon]`)은 op의 `bind`가 검증 때 params에 채운다. 그래서 job은
+제출된 값으로 돌고, 이름도 그 값으로 짓는다.
 
 **project.toml** (work_dir 루트; work_dir은 이 파일이 있는 폴더이며 따로 저장하지
 않는다):

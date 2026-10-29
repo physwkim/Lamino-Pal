@@ -70,6 +70,11 @@ class Op:
     # Output-path field -> name, from the validated params; covers every
     # optional `OutPath` field (checked in `build`).
     default_out: Callable[[Any], dict[str, str]] | None = None
+    # (params, project) -> params with the defaults the project decides filled
+    # in. It runs at validation, so a job runs with the values it was
+    # submitted with and `default_out` names the file from them. It must
+    # leave filled params as they are: the job validates them again.
+    bind: Callable[[Any, Any], Any] | None = None
 
     @property
     def doc(self) -> str:
@@ -101,6 +106,7 @@ def build(
     fn: Callable[..., Result],
     gpu: bool = False,
     default_out: Callable[[Any], dict[str, str]] | None = None,
+    bind: Callable[[Any, Any], Any] | None = None,
 ) -> Op:
     if not _NAME.match(name):
         raise ValueError(f"op name {name!r} is not `area.verb`")
@@ -112,7 +118,7 @@ def build(
         for m in (_Out, _In):
             if m not in f.metadata and _buried(f.annotation, m):
                 raise TypeError(f"op {name}: {k} hides its path marker from the dispatcher")
-    o = Op(name, cost, params, result, fn, gpu, default_out)
+    o = Op(name, cost, params, result, fn, gpu, default_out, bind)
     if o.path_fields(_Out) and not issubclass(params, OutputParams):
         raise TypeError(f"op {name} writes files; its params must derive OutputParams")
     optional = [k for k in o.path_fields(_Out) if not params.model_fields[k].is_required()]
@@ -129,6 +135,7 @@ def op(
     result: type[Result],
     gpu: bool = False,
     default_out: Callable[[Any], dict[str, str]] | None = None,
+    bind: Callable[[Any, Any], Any] | None = None,
 ) -> Callable[[Callable[..., Result]], Callable[..., Result]]:
     def register(fn: Callable[..., Result]) -> Callable[..., Result]:
         if name in REGISTRY:
@@ -141,6 +148,7 @@ def op(
             fn=fn,
             gpu=gpu,
             default_out=default_out,
+            bind=bind,
         )
         return fn
 

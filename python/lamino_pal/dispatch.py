@@ -136,7 +136,10 @@ def validate(op: Op, params: dict[str, Any] | Params, project: Project) -> Param
     """`params` checked against `op`, with its paths resolved and checked."""
     if isinstance(params, BaseModel):
         params = params.model_dump()
-    return _resolve_paths(op, op.params.model_validate(params), project)
+    p = op.params.model_validate(params)
+    if op.bind is not None:
+        p = op.bind(p, project)
+    return _resolve_paths(op, p, project)
 
 
 def _resolve_paths(op: Op, p: Params, project: Project) -> Params:
