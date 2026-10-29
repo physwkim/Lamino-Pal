@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import tifffile
 
-from lamino_pal import Refused, dispatch
+from lamino_pal import LaminoPalError, Refused, dispatch
 from lamino_pal.project import Project, Scan
 
 STEP = unicodedata.normalize("NFD", "360도 step")
@@ -84,7 +84,7 @@ def test_reimport_needs_overwrite_and_keeps_the_group(project, raw, run_job):
             lambda frac, msg: seen.append(msg),
         )
     # Refused before reading a frame.
-    assert seen == ["waiting for another import"]
+    assert seen == ["waiting for another import", f"importing {STEP_RAW}"]
     assert not (project.work_dir / "b.h5").exists()
     run_job(project, "scan.import", {"raw": FLY_RAW, "tag": "s", "bin": 1, "overwrite": True})
     (s,) = Project(project.path).data.scan
@@ -111,6 +111,13 @@ def test_an_import_that_loses_its_tag_removes_its_file(project, raw, run_job, tm
     assert list((project.work_dir / "h5").iterdir()) == []
     (s,) = Project(project.path).data.scan
     assert s.h5 == str(other)
+
+
+def test_a_failed_import_ends_its_wait_message(project, raw, run_job):
+    seen = []
+    with pytest.raises(LaminoPalError):
+        run_job(project, "scan.import", {"raw": "missing/S_proj", "tag": "s"}, lambda f, m: seen.append((f, m)))
+    assert seen == [(0.0, "waiting for another import"), (0.0, "importing missing/S_proj")]
 
 
 def test_a_progress_exception_stops_the_import(project, raw, run_job):

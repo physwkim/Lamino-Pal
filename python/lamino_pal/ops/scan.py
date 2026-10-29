@@ -78,12 +78,12 @@ def _relative(ctx: Context, path: str) -> str:
 
 
 @contextmanager
-def _import_lock(ctx: Context) -> Iterator[None]:
+def _import_lock(ctx: Context, raw: str) -> Iterator[None]:
     """One import per project at a time, from its checks through its commit:
     an import's output path and tag cannot change hands while it runs."""
     with open(ctx.project.work_dir / ".import.lock", "w") as f:
-        ctx.progress(0.0, "waiting for another import")
-        fcntl.flock(f, fcntl.LOCK_EX)
+        with ctx.waiting("another import", f"importing {raw}"):
+            fcntl.flock(f, fcntl.LOCK_EX)
         yield
 
 
@@ -116,7 +116,7 @@ def import_(ctx: Context, p: ImportParams) -> ImportResult:
     and add it to the project as `tag`. An existing tag is replaced only with
     `overwrite`, and keeps its group."""
     out = Path(p.out)
-    with _import_lock(ctx):
+    with _import_lock(ctx, p.raw):
         # Rechecked under the lock; the dispatcher checked `out` before it.
         if ctx.project.reload().find_scan(p.tag) and not p.overwrite:
             raise Refused(f"scan {p.tag} exists; pass overwrite to replace it")

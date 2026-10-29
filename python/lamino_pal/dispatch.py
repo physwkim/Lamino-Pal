@@ -10,7 +10,7 @@ import json
 import os
 import tempfile
 import time
-from contextlib import contextmanager, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 from functools import cache
 from dataclasses import dataclass
 from datetime import datetime
@@ -48,6 +48,14 @@ class Context:
     progress: Progress  # raises `Cancelled` once `cancel` fired
     cancel: _core.CancelToken  # for a tomoxide call that takes one
     gpu: int | None = None
+
+    @contextmanager
+    def waiting(self, what: str, then: str) -> Iterator[None]:
+        """Report waiting for `what` through the block, then `then`: a wait's
+        message must not outlive the wait."""
+        self.progress(0.0, f"waiting for {what}")
+        yield
+        self.progress(0.0, then)
 
 
 def run(
@@ -100,22 +108,19 @@ def _run(
         ctx = Context(project, caller, _heeding(cancel, progress), cancel)
         if op.prepare is not None:
             op.prepare(ctx, p)
-        lock = nullcontext()
-        if op.gpu:
-            gpu = process_gpu()
-            gpus = project.data.gpu.batch if job else [project.data.gpu.interactive]
-            if gpu not in gpus:
-                on = "no single GPU" if gpu is None else f"GPU {gpu}"
-                which = "a batch GPU" if job else "the interactive GPU"
-                raise Refused(
-                    f"{name} runs on {which} {gpus if job else gpus[0]}; this process's "
-                    f"CUDA runs on {on} (start it with TOMOXIDE_CUDA_DEVICES set to one)"
-                )
-            if gpu_wait_s is None:
-                ctx.progress(0.0, f"waiting for GPU {gpu}")
-            lock = gpu_lock(gpu, gpu_wait_s)
-        with lock as gpu:
-            ctx.gpu = gpu
+        with ExitStack() as held:
+            if op.gpu:
+                gpu = process_gpu()
+                gpus = project.data.gpu.batch if job else [project.data.gpu.interactive]
+                if gpu not in gpus:
+                    on = "no single GPU" if gpu is None else f"GPU {gpu}"
+                    which = "a batch GPU" if job else "the interactive GPU"
+                    raise Refused(
+                        f"{name} runs on {which} {gpus if job else gpus[0]}; this process's "
+                        f"CUDA runs on {on} (start it with TOMOXIDE_CUDA_DEVICES set to one)"
+                    )
+                with ctx.waiting(f"GPU {gpu}", f"on GPU {gpu}") if gpu_wait_s is None else nullcontext():
+                    ctx.gpu = held.enter_context(gpu_lock(gpu, gpu_wait_s))
             r = op.fn(ctx, p)
         if not isinstance(r, op.result):
             raise TypeError(f"{name} returned {type(r).__name__}, not {op.result.__name__}")
