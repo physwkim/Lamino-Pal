@@ -24,8 +24,8 @@ tomoxide `docs/LAMINOGRAPHY_ALIGNMENT.md`.
 - **단위는 하나.** center는 항상 full-res(bin 1) detector column `center_px`로
   저장한다. bin b 파일용 값 `c_b = (c_full − (b−1)/2)/b`는
   `units.center_for_scan(scan, c_full)` 한 함수만 계산하고, b는 project에 기록된
-  scan의 `bin`이다. import가 자기 binning을 기록하고, adopt는 h5에
-  `/lamino_pal/binning`이 있으면 그 값과 대조한다(README의 "bin-2 504 = full
+  scan의 `bin`이다. import가 자기 binning을 기록하고, adopt는 h5의 `/lamino_pal`
+  group에 `binning` attribute가 있으면 그 값과 대조한다(README의 "bin-2 504 = full
   1008.5" 수기 환산 제거). tilt는 tomocupy `--lamino_angle` 규약
   `phi = π/2 + tilt·π/180`.
 
@@ -111,9 +111,11 @@ maturin cdylib, `abi3-py312`, feature `cuda`를 tomoxide로 전달. 의존: tomo
 - `bl7c`: scan 탐색(NFD 폴더명 그대로 처리), `metadata.txt` JSON과 `.dat`
   header/column 해석, import. step: theta = `.dat` 앞 N행, flat = 뒤쪽 행. fly:
   `theta = linspace(0, R, N, endpoint=False)`, `R = round(N·speed·exptime)`,
-  R ∉ {180, 360}이면 거부. dark = 0, b×b mean binning, saturation 수 보고, h5에
-  `/lamino_pal/{binning, source, energy_ev, kind}` 기록. 출력 경로가 raw root
-  아래면 거부.
+  R ∉ {180, 360}이면 거부. dark = 0, b×b mean binning, saturation 수 보고, h5의
+  `/lamino_pal` group에 attribute `binning, source, energy_ev, kind` 기록. 출력
+  경로가 raw root 아래면 거부. 출력은 `.<name>.part`에 쓰고 rename하므로 실패나
+  취소 뒤에 반쪽 파일이 남지 않는다. `scan.import`는 project당 하나씩
+  (`.import.lock`) 돌며, tag 확인부터 commit까지 그 lock 안에 있다.
 - `bind`: tomoxide T1/T3 API의 얇은 wrapper. 무거운 호출은 `py.allow_threads`로
   GIL을 놓고, Python 쪽 `Cancel` 객체가 tomoxide `CancelToken`을 감싼다. progress
   callback은 GIL을 다시 잡고 호출하며 10 Hz로 제한한다. 배열은 numpy로 반환한다
