@@ -22,7 +22,7 @@ fn main() {
     }
     println!("cargo:rerun-if-changed=lib/tomoxide/crates/tomoxide");
     println!("cargo:rerun-if-changed=lib/tomoxide/Cargo.toml");
-    let rev = git(&["describe", "--always", "--dirty", "--abbrev=12"])
+    let rev = git(&["describe", "--tags", "--always", "--dirty", "--abbrev=12"])
         .unwrap_or_else(|| "unknown".into());
     println!("cargo:rustc-env=TOMOXIDE_REV={rev}");
 }

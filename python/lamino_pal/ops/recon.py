@@ -394,7 +394,7 @@ def tomoxide_cli() -> Path:
     if not (tox / "Cargo.toml").is_file():
         raise Refused(f"recon.run builds the tomoxide CLI from {tox}, which is missing")
     rev = subprocess.run(
-        ["git", "-C", str(tox), "describe", "--always", "--dirty", "--abbrev=12"],
+        ["git", "-C", str(tox), "describe", "--tags", "--always", "--dirty", "--abbrev=12"],
         capture_output=True,
         text=True,
         check=True,

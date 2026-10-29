@@ -253,7 +253,9 @@ def test_the_cli_is_built_only_from_the_cores_own_commit_and_kept(tmp_path, monk
     git("init", "-q")
     git("add", ".")
     git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "c")
-    rev = git("describe", "--always", "--abbrev=12").strip()
+    # tomoxide's release tags are lightweight.
+    git("tag", "v1.0.0")
+    rev = "v1.0.0"
     with pytest.raises(Refused, match=f"is at {rev}: rebuild the core"):
         recon.tomoxide_cli()
     (tox / "Cargo.toml").write_text("[workspace]\n# edit\n")
