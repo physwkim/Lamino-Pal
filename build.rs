@@ -20,6 +20,15 @@ fn main() {
         println!("cargo:rerun-if-changed={dir}/logs/HEAD");
         println!("cargo:rerun-if-changed={dir}/index");
     }
+    // A new tag renames the commit; cargo reruns on every build for a path
+    // that does not exist.
+    for refs in ["refs/tags", "packed-refs"] {
+        if let Some(path) = git(&["rev-parse", "--path-format=absolute", "--git-path", refs])
+            .filter(|path| std::path::Path::new(path).exists())
+        {
+            println!("cargo:rerun-if-changed={path}");
+        }
+    }
     println!("cargo:rerun-if-changed=lib/tomoxide/crates/tomoxide");
     println!("cargo:rerun-if-changed=lib/tomoxide/Cargo.toml");
     let rev = git(&["describe", "--tags", "--always", "--dirty", "--abbrev=12"])
