@@ -3,6 +3,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -139,9 +140,11 @@ def test_cancel_refuses_a_pid_that_is_not_the_jobs(project, sleeper):
     until(lambda: jobs.get(project, st.id).status == "running")
     real = jobs.get(project, st.id)
     d = jobs.jobs_dir(project) / st.id
-    # The sleeper's pid with the job's start time: a reused pid.
-    jobs._write(d, real.model_copy(update={"pid": sleeper.pid}))
-    with pytest.raises(Refused, match=f"process {sleeper.pid} is not running"):
+    # The sleeper's pid with a start time not its own: a reused pid, so the
+    # job's process is gone. (The job's own may equal the sleeper's: both
+    # started within one clock tick.)
+    jobs._write(d, real.model_copy(update={"pid": sleeper.pid, "proc_start": jobs._proc_start(sleeper.pid) - 1}))
+    with pytest.raises(Refused, match=f"job {st.id} is failed"):
         jobs.cancel(project, st.id)
     # Its own start time, but not a process group leader: not a job's.
     jobs._write(d, real.model_copy(update={"pid": sleeper.pid, "proc_start": jobs._proc_start(sleeper.pid)}))
@@ -160,6 +163,37 @@ def test_a_job_cancelled_before_its_process_runs_it_is_cancelled(project, monkey
     assert jobs.cancel(project, st.id).cancel_sent is not None
     st = jobs.wait(project, st.id, 20)
     assert (st.status, st.message, st.error) == ("cancelled", "stopped before it ran", None)
+
+
+def test_a_cancel_while_the_job_process_starts_waits_for_its_pid(project, monkeypatch):
+    popen, starting, cancelled = subprocess.Popen, threading.Event(), []
+
+    def slow_popen(*a, **kw):
+        starting.set()
+        time.sleep(0.5)
+        return popen(*a, **kw)
+
+    def cancel():
+        starting.wait(10)
+        jid = next(j.name for j in jobs.jobs_dir(project).iterdir() if j.is_dir())
+        cancelled.append(jobs.cancel(project, jid))
+
+    monkeypatch.setattr(jobs.subprocess, "Popen", slow_popen)
+    t = threading.Thread(target=cancel)
+    t.start()
+    st = jobs.submit(project, "test.steps", {"n": 1, "dt": 60}, "cli")
+    t.join(10)
+    assert cancelled[0].pid == st.pid and cancelled[0].cancel_sent is not None
+    assert jobs.wait(project, st.id, 20).status == "cancelled"
+
+
+def test_a_job_whose_submitter_died_before_starting_it_is_failed(project):
+    st = jobs.wait(project, jobs.submit(project, "test.steps", {"n": 1}, "cli").id, 20)
+    jobs._write(jobs.jobs_dir(project) / st.id, st.model_copy(update={"status": "queued", "pid": None}))
+    with pytest.raises(Refused, match=f"job {st.id} is failed"):
+        jobs.cancel(project, st.id)
+    st = jobs.get(project, st.id)
+    assert (st.status, st.error) == ("failed", "the submitting process ended before starting the job")
 
 
 def test_a_job_process_that_dies_is_marked_failed(project):

@@ -20,7 +20,7 @@ import threading
 import time
 import traceback
 from collections import Counter
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator, Literal
@@ -80,55 +80,61 @@ def submit(project: Project, name: str, params: dict[str, Any], caller: Caller) 
     if op.cost != "job":
         raise LaminoPalError(f"{name} is not a job op; run it directly")
     p = dispatch.validate(op, params, project)
-    # GUI and MCP submit concurrently: the checks and the queued state go
-    # down under one lock, so the next submitter counts this job.
     jobs_dir(project).mkdir(parents=True, exist_ok=True)
-    with open(jobs_dir(project) / "submit.lock", "a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        # Each job checks its outputs when it starts; two queued at once would
-        # both pass and the second overwrite the first.
-        outs = {getattr(p, k) for k in op.path_fields(_Out)}
-        for other in list_(project):
-            o = REGISTRY.get(other.op)
-            clash = outs & {other.params.get(k) for k in o.path_fields(_Out)} if other.active and o else set()
-            if clash:
-                raise Refused(f"job {other.id} is writing {min(clash)}")
-        gpu = _pick_gpu(project) if op.gpu else None
-        now = datetime.now().astimezone()
-        jid = f"{now:%Y%m%d-%H%M%S}-{name}-{secrets.token_hex(2)}"
-        d = jobs_dir(project) / jid
-        d.mkdir(parents=True)
-        st = JobState(
-            id=jid,
-            project=str(project.path),
-            op=name,
-            params=p.model_dump(mode="json"),
-            caller=caller,
-            gpu=gpu,
-            created=now.isoformat(timespec="seconds"),
-        )
-        _write(d, st)
-    env = dict(os.environ)
-    if gpu is not None:
-        env["TOMOXIDE_CUDA_DEVICES"] = str(gpu)
-    try:
-        with open(d / "out.log", "wb") as log:
-            proc = subprocess.Popen(
-                [*COMMAND, str(d)],
-                stdin=subprocess.DEVNULL,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                env=env,
-                cwd=project.work_dir,
-                start_new_session=True,
+    # The job's state lock is held from its queued state to its pid: whoever
+    # reads an active job under that lock finds its pid.
+    with ExitStack() as held:
+        # GUI and MCP submit concurrently: the checks and the queued state go
+        # down under one lock, so the next submitter counts this job.
+        with open(jobs_dir(project) / "submit.lock", "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            # Each job checks its outputs when it starts; two queued at once
+            # would both pass and the second overwrite the first.
+            outs = {getattr(p, k) for k in op.path_fields(_Out)}
+            for other in list_(project):
+                o = REGISTRY.get(other.op)
+                clash = outs & {other.params.get(k) for k in o.path_fields(_Out)} if other.active and o else set()
+                if clash:
+                    raise Refused(f"job {other.id} is writing {min(clash)}")
+            gpu = _pick_gpu(project) if op.gpu else None
+            now = datetime.now().astimezone()
+            jid = f"{now:%Y%m%d-%H%M%S}-{name}-{secrets.token_hex(2)}"
+            d = jobs_dir(project) / jid
+            d.mkdir(parents=True)
+            st = JobState(
+                id=jid,
+                project=str(project.path),
+                op=name,
+                params=p.model_dump(mode="json"),
+                caller=caller,
+                gpu=gpu,
+                created=now.isoformat(timespec="seconds"),
             )
-    except OSError as e:
-        _update(d, status="failed", error=f"could not start: {e}", finished=_now())
-        raise
-    # Read before anything reaps it: until then the pid cannot be reused.
-    start = _proc_start(proc.pid)
-    threading.Thread(target=proc.wait, daemon=True).start()
-    return _update(d, pid=proc.pid, proc_start=start)
+            held.enter_context(_lock(d))
+            _write(d, st)
+        env = dict(os.environ)
+        if gpu is not None:
+            env["TOMOXIDE_CUDA_DEVICES"] = str(gpu)
+        try:
+            with open(d / "out.log", "wb") as log:
+                proc = subprocess.Popen(
+                    [*COMMAND, str(d)],
+                    stdin=subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    env=env,
+                    cwd=project.work_dir,
+                    start_new_session=True,
+                )
+        except OSError as e:
+            _write(d, st.model_copy(update={"status": "failed", "error": f"could not start: {e}", "finished": _now()}))
+            raise
+        # Read before anything reaps it: until then the pid cannot be reused.
+        start = _proc_start(proc.pid)
+        threading.Thread(target=proc.wait, daemon=True).start()
+        st = st.model_copy(update={"pid": proc.pid, "proc_start": start})
+        _write(d, st)
+    return st
 
 
 def _dir(project: Project, jid: str) -> Path:
@@ -143,17 +149,7 @@ def get(project: Project, jid: str) -> JobState:
     marked failed, or cancelled when the cancel killed it before it ran."""
     d = _dir(project, jid)
     with _lock(d):
-        st = _read(d)
-        if st.active and st.pid is not None and not _alive(st):
-            # The process records every end it lives through, but SIGTERM
-            # kills it outright until `run` installs its handler.
-            if st.status == "queued" and st.cancel_sent is not None:
-                end = {"status": "cancelled", "message": "stopped before it ran"}
-            else:
-                end = {"status": "failed", "error": f"the job process ended without a result; see {d / 'out.log'}"}
-            st = st.model_copy(update={**end, "finished": _now()})
-            _write(d, st)
-    return st
+        return _settle(d, _read(d))
 
 
 def list_(project: Project) -> list[JobState]:
@@ -181,7 +177,7 @@ def cancel(project: Project, jid: str) -> JobState:
     that job's process."""
     d = _dir(project, jid)
     with _lock(d):
-        st = _read(d)
+        st = _settle(d, _read(d))
         if not st.active:
             raise Refused(f"job {jid} is {st.status}")
         try:
@@ -245,6 +241,24 @@ def run(d: Path) -> int:
             os._exit(128 + signal.SIGTERM)
     _update(d, **end, finished=_now())
     return {"done": 0, "cancelled": 128 + signal.SIGTERM}.get(end["status"], 1)
+
+
+def _settle(d: Path, st: JobState) -> JobState:
+    """`st`, read under `d`'s lock, ended if its process is gone."""
+    if not st.active or _alive(st):
+        return st
+    if st.pid is None:
+        # `submit` holds the lock until the pid is written.
+        end = {"status": "failed", "error": "the submitting process ended before starting the job"}
+    elif st.status == "queued" and st.cancel_sent is not None:
+        # The process records every end it lives through, but SIGTERM
+        # kills it outright until `run` installs its handler.
+        end = {"status": "cancelled", "message": "stopped before it ran"}
+    else:
+        end = {"status": "failed", "error": f"the job process ended without a result; see {d / 'out.log'}"}
+    st = st.model_copy(update={**end, "finished": _now()})
+    _write(d, st)
+    return st
 
 
 def _pick_gpu(project: Project) -> int:
