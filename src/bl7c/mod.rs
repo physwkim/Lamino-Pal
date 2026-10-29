@@ -176,6 +176,12 @@ pub(crate) fn open(root: &Path, raw: &str) -> Result<Layout, Error> {
         )));
     }
     let dir = root.join(raw);
+    if !dir.is_dir() {
+        return Err(Error::Refused(format!(
+            "raw {raw:?} is no folder under the raw root; pass it as scan.discover \
+             lists it: names match byte for byte, and a Mac writes Korean as NFD"
+        )));
+    }
     if dir.join("metadata.txt").is_file() {
         return open_fly(dir, raw);
     }
@@ -411,6 +417,14 @@ mod tests {
             Err(Error::Format(..))
         ));
         assert!(matches!(open(&tmp, "fly/G_00001"), Err(Error::Refused(_))));
+        // The fixture's NFC "도" spelled NFD: another name on disk.
+        let e = open(&tmp, "360\u{1103}\u{1169} step/S_N3_proj")
+            .err()
+            .unwrap();
+        assert!(
+            matches!(&e, Error::Refused(why) if why.contains("is no folder under the raw root")),
+            "{e}"
+        );
     }
 
     #[test]
