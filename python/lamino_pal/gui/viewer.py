@@ -4,6 +4,7 @@ time it is needed."""
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
 from napari._vispy.canvas import VispyCanvas
 from napari.components import ViewerModel
@@ -19,7 +20,7 @@ class _Canvas(VispyCanvas):
     A fit (fit_to_view: napari's on the first layer and on ndisplay, or
     reset_view) is to the size the canvas last had, napari's default 800×600
     before it was made, so it is made again as the canvas is resized until
-    it is next drawn shown."""
+    it is next drawn shown. A camera set by hand is kept."""
 
     _unfit = False
 
@@ -36,6 +37,10 @@ class _Canvas(VispyCanvas):
     def _drawn(self, event) -> None:
         if self.native.isVisible():
             self._unfit = False
+
+    def keep(self) -> None:
+        """The camera as now set is no fit to redo."""
+        self._unfit = False
 
     def on_resize(self, event) -> None:
         super().on_resize(event)
@@ -90,6 +95,30 @@ class Viewer(qt.QWidget):
     def close_canvas(self) -> None:
         if self._qt_viewer is not None:
             self._qt_viewer.close()
+
+    def look(
+        self,
+        zoom: float | None = None,
+        center: list[float] | None = None,
+        angles: list[float] | None = None,
+        fit: bool = False,
+    ) -> dict[str, Any]:
+        """The camera, fitted first when `fit`, then set to what is given and
+        kept as the canvas is resized."""
+        cam = self.model.camera
+        if fit:
+            self.model.reset_view()
+        if zoom is not None or center is not None or angles is not None:
+            # Made first: a canvas made later would fit over the camera.
+            canvas = self.qt_viewer.canvas
+            if zoom is not None:
+                cam.zoom = zoom
+            if center is not None:
+                cam.center = tuple(center)
+            if angles is not None:
+                cam.angles = tuple(angles)
+            canvas.keep()
+        return {"zoom": cam.zoom, "center": list(cam.center), "angles": list(cam.angles)}
 
     def replace(self, name: str, data, **kwargs):
         """Image layer `name` holding `data`, made or refilled."""

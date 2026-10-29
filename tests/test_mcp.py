@@ -19,7 +19,7 @@ from conftest import DATA
 from test_align import _group
 from test_recon import _scan
 
-from lamino_pal import dispatch, jobs, launch
+from lamino_pal import dispatch, jobs, launch, remote
 from lamino_pal.mcp import figures
 from lamino_pal.mcp.figures import FIGURES
 from lamino_pal.render import to_u8, window
@@ -31,7 +31,19 @@ from lamino_pal.project import Project
 
 pytestmark = pytest.mark.anyio
 
-FIXED = {"project_open", "project_info", "job_list", "job_status", "job_wait", "job_cancel", "job_result"}
+FIXED = {
+    "project_open",
+    "project_info",
+    "job_list",
+    "job_status",
+    "job_wait",
+    "job_cancel",
+    "job_result",
+    "gui_state",
+    "gui_show_tab",
+    "gui_view",
+    "gui_graph",
+}
 
 
 @pytest.fixture
@@ -114,6 +126,20 @@ async def test_an_op_judged_by_eye_returns_its_image_saved_to_cite(project):
     assert not r.is_error
     (d,) = project.reload().group[0].decisions
     assert (d.by, d.evidence) == ("agent", evidence)
+
+
+async def test_the_gui_tools_reach_the_gui_open_on_the_project(project):
+    async with Client(build(project)) as c:
+        r = await c.call_tool("gui_state", {})
+        assert r.is_error and r.content[0].text.endswith(f": no Lamino-Pal GUI is open on {project.path}")
+        seen = []
+        gui = remote.Server(project.path, lambda cmd, args: seen.append((cmd, args)) or {"x": args["x"]})
+        try:
+            r = await c.call_tool("gui_graph", {"tab": "Align", "graph": "focus", "x": [1, 2]})
+        finally:
+            gui.close()
+    assert not r.is_error and r.structured_content == {"x": [1.0, 2.0]}
+    assert seen == [("graph", {"tab": "Align", "graph": "focus", "x": [1.0, 2.0], "y": None, "reset": False})]
 
 
 async def test_a_refusal_and_invalid_params_reach_the_agent_and_the_log(project):

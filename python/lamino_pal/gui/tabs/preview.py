@@ -7,7 +7,6 @@ import json
 
 import numpy as np
 from silx.gui import qt
-from silx.gui.plot import Plot1D
 
 from lamino_pal import _core
 from lamino_pal.artifacts import load_h5
@@ -58,7 +57,7 @@ class PreviewTab(Tab):
         self.cnr.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
         self.cnr.itemSelectionChanged.connect(self._variant)
         self.cnr.hide()
-        self.frc = Plot1D()
+        self.frc = self.graph("FRC")
         self.frc.setMinimumHeight(160)
         self.frc.hide()
         layout = qt.QVBoxLayout(self)

@@ -1,11 +1,13 @@
 """What every tab has: the window's context, a panel in the parameters dock,
-its napari viewers, and the ops it runs through the window's runner."""
+its napari viewers and silx graphs, and the ops it runs through the window's
+runner."""
 
 from __future__ import annotations
 
 from typing import Any, Callable
 
 from silx.gui import qt
+from silx.gui.plot import Plot1D, PlotWidget
 
 from lamino_pal.gui.actions import figure_name, job_figure, save_figure
 from lamino_pal.gui.runner import by_hand
@@ -62,6 +64,7 @@ class Tab(qt.QWidget):
         self.panel = qt.QVBoxLayout(self.controls)
         self.docks: list[qt.QDockWidget] = []
         self.viewers: list[Viewer] = []
+        self.graphs: dict[str, PlotWidget] = {}
 
     def section(self, title: str) -> qt.QFormLayout:
         """A titled form in the parameters panel."""
@@ -78,6 +81,12 @@ class Tab(qt.QWidget):
             v.made.connect(lambda qv: self.win.attach_docks(self, qv))
         self.viewers.append(v)
         return v
+
+    def graph(self, title: str, cls: type[PlotWidget] = Plot1D) -> PlotWidget:
+        """A graph of this tab, named `title` to an agent."""
+        p = cls()
+        self.graphs[title] = p
+        return p
 
     def close_viewers(self) -> None:
         for v in self.viewers:

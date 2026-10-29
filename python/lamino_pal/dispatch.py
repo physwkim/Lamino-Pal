@@ -244,10 +244,15 @@ def process_gpu() -> int | None:
     return d[0] if len(d) == 1 else None
 
 
-def gpu_lock_path(n: int) -> Path:
+def runtime_dir() -> Path:
+    """Where this user's processes keep the locks and sockets they share."""
     d = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / "lamino-pal"
     d.mkdir(parents=True, exist_ok=True)
-    return d / f"gpu{n}.lock"
+    return d
+
+
+def gpu_lock_path(n: int) -> Path:
+    return runtime_dir() / f"gpu{n}.lock"
 
 
 def gpu_busy(n: int) -> bool:

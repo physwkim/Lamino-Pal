@@ -20,7 +20,7 @@ from silx.gui import qt
 from silx.gui.plot.items import Shape
 from test_recon import _scan
 
-from lamino_pal import LaminoPalError, _core, dispatch
+from lamino_pal import LaminoPalError, _core, dispatch, remote
 from lamino_pal.artifacts import save_h5
 from lamino_pal.gui import status
 from lamino_pal.gui.actions import ACTIONS, RunOpDialog
@@ -169,6 +169,52 @@ def test_a_call_the_question_starts_does_not_ask(app, project, monkeypatch):
     pump(app, 0.2)
     runner.shutdown()
     assert asked == [name] and ran == [1, 3] and done == [3]
+
+
+def _remote(app, win, cmd, **args):
+    """remote.call from a thread of its own, as the MCP server makes it, while
+    the Qt thread runs."""
+    out = {}
+
+    def call():
+        try:
+            out["r"] = remote.call(win.project.path, cmd, args)
+        except Exception as e:
+            out["e"] = e
+
+    t = threading.Thread(target=call)
+    t.start()
+    assert pump(app, 15, lambda: not t.is_alive())
+    if "e" in out:
+        raise out["e"]
+    return out["r"]
+
+
+def test_an_agent_shows_a_tab_and_zooms_a_viewer_and_a_graph(app, win):
+    st = _remote(app, win, "state")
+    assert st["tab"] == win.current_tab().NAME
+    assert st["context"] == {"group": win.group, "tag": win.tag, "volume": win.volume}
+    assert st["tabs"]["Volume"] == {"viewers": ["z slice", "xz", "yz", "3D"], "graphs": ["focus by z"]}
+    assert st["tabs"]["Export"]["graphs"] == ["histogram", "MIP z", "MIP y", "MIP x"]
+    assert _remote(app, win, "show_tab", tab="Align")["tab"] == "Align" == win.current_tab().NAME
+    v = win.tabs["Align"].view
+    v.replace("img", np.zeros((40, 60), np.float32))
+    cam = _remote(app, win, "view", tab="Align", viewer="align", zoom=3.0, center=[10.0, 20.0])
+    assert cam["zoom"] == v.model.camera.zoom == 3.0 and cam["center"][1:] == [10.0, 20.0]
+    cam = _remote(app, win, "view", tab="Align", viewer="align", fit=True)
+    assert cam["center"][1:] == [19.5, 29.5]
+    plot = win.tabs["Align"].plot
+    plot.addCurve([0, 10], [0, 5], legend="c")
+    lim = _remote(app, win, "graph", tab="Align", graph="focus", x=[1.0, 2.0], y=[-1.0, 1.0])
+    assert lim == {"x": [1.0, 2.0], "y": [-1.0, 1.0]} and plot.getXAxis().getLimits() == (1.0, 2.0)
+    lim = _remote(app, win, "graph", tab="Align", graph="focus", reset=True)
+    assert lim["x"][0] <= 0 and lim["x"][1] >= 10
+    with pytest.raises(LaminoPalError, match="^no tab Foo; tabs: Data, Raw"):
+        _remote(app, win, "show_tab", tab="Foo")
+    with pytest.raises(LaminoPalError, match="^Align has no graph FRC; graphs: focus$"):
+        _remote(app, win, "graph", tab="Align", graph="FRC")
+    with pytest.raises(LaminoPalError, match="^unknown command zoom"):
+        _remote(app, win, "zoom")
 
 
 def test_status_names_how_each_field_was_decided_and_the_next_tab(scene):

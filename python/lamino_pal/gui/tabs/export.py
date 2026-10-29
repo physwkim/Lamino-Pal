@@ -7,7 +7,7 @@ import numpy as np
 from pydantic import ValidationError
 from silx.gui import qt
 from silx.gui.colors import Colormap
-from silx.gui.plot import Plot1D, Plot2D
+from silx.gui.plot import Plot2D
 
 from lamino_pal import LaminoPalError, dispatch
 from lamino_pal.artifacts import load_h5
@@ -28,14 +28,14 @@ class ExportTab(Tab):
     def __init__(self, win):
         super().__init__(win)
         self.info = qt.QLabel(wordWrap=True)
-        self.hist = Plot1D()
+        self.hist = self.graph("histogram")
         self.hist.setMinimumHeight(180)
         self.hist.getXAxis().setLabel("value")
         self.hist.getYAxis().setLabel("voxels")
         self.mips = {}
         row = qt.QSplitter(qt.Qt.Horizontal)
         for k, title in MIPS:
-            p = Plot2D()
+            p = self.graph(f"MIP {k}", Plot2D)
             p.setGraphTitle(f"MIP {title}")
             p.setKeepDataAspectRatio(True)
             p.setYAxisInverted(True)

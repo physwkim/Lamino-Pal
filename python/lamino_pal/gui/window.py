@@ -10,7 +10,7 @@ from typing import Any
 
 from silx.gui import qt
 
-from lamino_pal import jobs
+from lamino_pal import jobs, remote
 from lamino_pal.jobs import JobState
 from lamino_pal.launch import ENV
 from lamino_pal.ops.registry import REGISTRY
@@ -19,6 +19,7 @@ from lamino_pal.project import Group, Project
 from lamino_pal.gui import status
 from lamino_pal.gui.actions import ACTIONS, RunOpDialog
 from lamino_pal.gui.docks import JobsWidget, LogWidget
+from lamino_pal.gui.remote import serve
 from lamino_pal.gui.runner import Runner, by_hand, message
 from lamino_pal.gui.tabs import TABS
 from lamino_pal.gui.tree import ProjectTree
@@ -81,6 +82,15 @@ class MainWindow(qt.QMainWindow):
         self._watch()
         self.on_project()
         self._tab_changed(self.tabWidget.currentIndex())
+
+        self.remote: remote.Server | None = None
+        try:
+            self.remote = serve(self)
+        except OSError as e:
+            self.statusBar().showMessage(f"no agent commands: {e}", 30000)
+        else:
+            if not self.remote.serving:
+                self.statusBar().showMessage("another GUI on this project takes the agent's commands", 30000)
 
     # Context ---------------------------------------------------------------
 
@@ -263,6 +273,8 @@ class MainWindow(qt.QMainWindow):
             _relaunch(Path(path))
 
     def closeEvent(self, event: qt.QCloseEvent) -> None:
+        if self.remote is not None:
+            self.remote.close()
         self.runner.shutdown()
         for tab in self.tabs.values():
             tab.close_viewers()

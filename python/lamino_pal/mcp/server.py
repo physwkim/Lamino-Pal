@@ -30,7 +30,7 @@ from mcp.server.mcpserver.utilities.func_metadata import ArgModelBase, FuncMetad
 from mcp_types import CallToolResult, ContentBlock, ImageContent, TextContent
 from pydantic import ConfigDict, Field, ValidationError
 
-from lamino_pal import LaminoPalError, dispatch, jobs, launch
+from lamino_pal import LaminoPalError, dispatch, jobs, launch, remote
 from lamino_pal.artifacts import load_h5
 from lamino_pal.mcp import figures
 from lamino_pal.ops import REGISTRY, load_all
@@ -44,7 +44,9 @@ LOG_LINES = 200  # of lamino://log
 INSTRUCTIONS = """\
 Laminography reconstruction of PLS-II BL7C scans on tomoxide. Every analysis
 op is a tool; a job op returns a job_id to follow with job_wait and
-job_result. Read lamino://guide/alignment before aligning a mount group."""
+job_result. Read lamino://guide/alignment before aligning a mount group.
+With a GUI open on the project, the gui_ tools show its user what you mean:
+a tab, a viewer's zoom, a graph's range."""
 
 
 class Session:
@@ -272,6 +274,52 @@ def build(project: Project | None) -> MCPServer:
                 raise ToolError(f"job {job_id} is {st.status}" + (f": {st.error}" if st.error else ""))
             fig = await anyio.to_thread.run_sync(_job_figure, project, st) if figures.has(st.op) else []
             return _reply(st.result, fig)
+
+    def gui(cmd: str, args: dict[str, Any]) -> Any:
+        with _errors():
+            return remote.call(session.need().path, cmd, args)
+
+    @server.tool()
+    async def gui_state() -> dict[str, Any]:
+        """The GUI open on the project: the tab shown, the group, scan and
+        volume in view, and each tab's viewers and graphs. Every gui_ tool
+        fails when no GUI is open on the project."""
+        return await anyio.to_thread.run_sync(gui, "state", {})
+
+    @server.tool()
+    async def gui_show_tab(tab: str) -> dict[str, Any]:
+        """Show GUI tab `tab`. Returns gui_state."""
+        return await anyio.to_thread.run_sync(gui, "show_tab", {"tab": tab})
+
+    @server.tool()
+    async def gui_view(
+        tab: str,
+        viewer: str,
+        zoom: float | None = None,
+        center: list[float] | None = None,
+        angles: tuple[float, float, float] | None = None,
+        fit: bool = False,
+    ) -> dict[str, Any]:
+        """Set the camera of viewer `viewer` of GUI tab `tab`: fit the data to
+        it first when `fit`, then set zoom (screen pixels per data pixel),
+        center ([y, x], or [z, y, x] in 3D, in data pixels) and the 3D view's
+        angles (degrees). Returns the camera."""
+        args = {"tab": tab, "viewer": viewer, "zoom": zoom, "center": center, "angles": angles, "fit": fit}
+        return await anyio.to_thread.run_sync(gui, "view", args)
+
+    @server.tool()
+    async def gui_graph(
+        tab: str,
+        graph: str,
+        x: tuple[float, float] | None = None,
+        y: tuple[float, float] | None = None,
+        reset: bool = False,
+    ) -> dict[str, Any]:
+        """Zoom graph `graph` of GUI tab `tab`: autoscale it first when
+        `reset`, then set the x and y axis ranges [lo, hi]. Returns the
+        ranges."""
+        args = {"tab": tab, "graph": graph, "x": x, "y": y, "reset": reset}
+        return await anyio.to_thread.run_sync(gui, "graph", args)
 
     @server.resource("lamino://project", name="project", description="project.toml", mime_type="application/toml")
     def project_toml() -> str:

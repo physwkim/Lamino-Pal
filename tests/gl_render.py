@@ -63,6 +63,22 @@ def test_a_canvas_made_over_layers_draws_as_one_that_heard_them_inserted(app, nd
     assert np.array_equal(img, made(False))
 
 
+def test_a_camera_set_by_hand_is_kept_as_its_canvas_is_first_drawn(app):
+    v = Viewer("t")
+    v.model.add_image(np.ones((40, 60), "f4"))
+    # Before the canvas has its size: a fit would be redone at it.
+    v.look(zoom=3.0, center=[10.0, 20.0])
+    v.resize(600, 300)
+    v.setAttribute(qt.Qt.WA_DontShowOnScreen)
+    v.show()
+    pump(app, 0.3)
+    try:
+        assert v.model.camera.zoom == 3.0 and v.model.camera.center[1:] == (10.0, 20.0)
+    finally:
+        v.close_canvas()
+        v.close()
+
+
 def fill(img: np.ndarray) -> tuple[float, float]:
     """The height and width of what `img` shows on its black ground, as
     fractions of its own."""

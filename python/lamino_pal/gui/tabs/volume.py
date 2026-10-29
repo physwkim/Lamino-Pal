@@ -13,7 +13,6 @@ import h5py
 import numpy as np
 from PIL import Image
 from silx.gui import qt
-from silx.gui.plot import Plot1D
 
 from lamino_pal import LaminoPalError, Refused, units
 from lamino_pal.gui.tabs.base import BAD, GOOD, WARN, Tab, badge, button, spin
@@ -62,7 +61,7 @@ class VolumeTab(Tab):
         self.view3d.model.dims.ndisplay = 3
         self.info = qt.QLabel(wordWrap=True)
         self.fov = qt.QLabel(wordWrap=True)
-        self.plot = Plot1D()
+        self.plot = self.graph("focus by z")
         self.plot.setMinimumHeight(170)
         self.plot.sigPlotSignal.connect(self._marker_moved)
         aux = qt.QSplitter(qt.Qt.Vertical)

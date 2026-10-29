@@ -242,6 +242,12 @@ TXM-Pal 구조를 따른다: `gui/ui/main.ui`(Designer), worker thread →
 `silx.gui.utils.concurrent.submitToQtMainThread`. 한 channel의 호출은
 latest-wins이고, 버튼으로 낸 호출은 그 channel에서 도는 호출을 취소할지 묻는다.
 
+**agent 명령.** agent는 MCP `gui_*` tool로 이 창의 탭을 바꾸고 viewer camera와
+graph 범위를 맞춘다(`gui/remote.py`). project마다
+`$XDG_RUNTIME_DIR/lamino-pal/gui-<hash>.sock` 하나를 그 project의 lock을 쥔 GUI가
+열고(`lamino_pal.remote`), 명령은 Qt thread에서 돈다. 이렇게 정한 camera는 canvas가
+처음 그려질 때의 refit에 덮이지 않는다.
+
 **Viewer.** 이미지와 볼륨은 napari, 1D curve는 silx `Plot1D`가 맡는다.
 
 - napari를 쓰는 이유:
@@ -380,7 +386,9 @@ GPU로 뜨고, `project_open`이 project를 만든다.
 `align.center_sweep` → `align_center_sweep`, 설명은 op docstring(영문), 입력
 schema는 pydantic 모델이다. 인자는 dispatcher가 검증하므로 잘못된 호출도
 log에 `invalid`로 남는다. 고정 tool로 `project_open`, `project_info`,
-`job_list`, `job_status`, `job_wait`, `job_cancel`, `job_result`를 더한다.
+`job_list`, `job_status`, `job_wait`, `job_cancel`, `job_result`와, 그 project에
+열린 GUI를 움직이는 `gui_state`, `gui_show_tab`, `gui_view`, `gui_graph`(§6)를
+더한다. 열린 GUI가 없으면 `gui_*`는 오류를 낸다.
 
 **반환.**
 
@@ -495,12 +503,15 @@ skip이 아니라 실패로 처리한다.
 - GUI(`tests/test_gui.py`, `QT_QPA_PLATFORM=offscreen`, `QT_API=pyside6`): op마다
   action, None을 받는 필수 param, latest-wins와 버튼의 취소 질문, 상단 bar의 결정 출처와 다음 탭,
   instant op figure와 job 끝, Volume slider 한 번에 동기화 한 번과 3D 볼륨,
-  Export z 범위가 band를 따르고 손으로 고친 값은 유지. `QT_QPA_OFFSCREEN_NO_GLX=1`로
+  Export z 범위가 band를 따르고 손으로 고친 값은 유지, agent 명령(탭, camera,
+  graph 범위). `tests/test_remote.py`: project당 GUI 하나가 socket을 열고 죽은
+  GUI의 socket은 넘겨받는다. `QT_QPA_OFFSCREEN_NO_GLX=1`로
   DISPLAY와 무관하게 GL 없이 돈다.
 - 렌더링(`tests/test_render.py`): Qt platform은 process에 하나이므로
   `tests/gl_render.py`를 xcb의 별도 process로 돌린다(창은 `WA_DontShowOnScreen`).
   layer가 든 model에 나중에 만든 canvas가 layer를 받으며 만든 canvas와 같은
-  pixel을 그린다(2D grid, 3D). DISPLAY에 GLX가 없으면 skip한다; 이 기계에서는
+  pixel을 그린다(2D grid, 3D). 손으로 정한 camera는 첫 draw 뒤에도 남는다.
+  DISPLAY에 GLX가 없으면 skip한다; 이 기계에서는
   `DISPLAY=:0`.
 - pytest는 `lamino_pal`에서 나는 DeprecationWarning만 오류로 만든다. GUI
   stack(napari, npe2, app_model, matplotlib)이 import 때 내는 경고는 우리 것이

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import numpy as np
 from silx.gui import qt
-from silx.gui.plot import Plot1D
 
 from lamino_pal import scans, units
 from lamino_pal.artifacts import load_h5
@@ -33,7 +32,7 @@ class AlignTab(Tab):
     def __init__(self, win):
         super().__init__(win)
         self.view = self.viewer("align")
-        self.plot = Plot1D()
+        self.plot = self.graph("focus")
         self.plot.setMinimumHeight(180)
         self.plot.sigPlotSignal.connect(self._clicked)
         self.verdict = qt.QLabel(wordWrap=True)
