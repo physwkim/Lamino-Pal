@@ -4,7 +4,7 @@ import threading
 import pytest
 from pydantic import ValidationError
 
-from lamino_pal import LaminoPalError, Refused, dispatch
+from lamino_pal import LaminoPalError, Refused, _core, dispatch
 from lamino_pal.ops.registry import (
     REGISTRY,
     OptOutPath,
@@ -180,6 +180,27 @@ def _gpu(ctx, p):
     """Record the GPU it ran under."""
     ctx.progress(0.0, str(ctx.gpu))
     return Result()
+
+
+def _count(ctx, p):
+    """Count to 3, firing the cancel at 1."""
+    for i in range(3):
+        ctx.progress(i / 3, str(i))
+        if i == 1:
+            ctx.cancel.cancel()
+    return Result()
+
+
+def test_a_fired_cancel_stops_the_op_at_its_next_progress_call(project, monkeypatch):
+    o = build("test.count", cost="interactive", params=Params, result=Result, fn=_count)
+    monkeypatch.setitem(REGISTRY, o.name, o)
+    seen, cancel = [], _core.CancelToken()
+    with pytest.raises(dispatch.Cancelled):
+        dispatch.run(
+            "test.count", {}, project=project, caller="gui", progress=lambda f, m: seen.append(m), cancel=cancel
+        )
+    assert seen == ["0", "1"] and cancel.is_cancelled()
+    assert _log(project)[-1]["status"] == "cancelled"
 
 
 def test_a_gpu_op_runs_only_on_the_gpu_this_process_is_pinned_to(project, monkeypatch):

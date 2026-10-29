@@ -63,8 +63,9 @@ tomoxide `docs/LAMINOGRAPHY_ALIGNMENT.md`.
 | 결정 기록 | `group.decide` | instant | Python |
 
 op 비용 등급: **instant**(<0.2 s, 호출 스레드), **interactive**(수 초, 프로세스
-안 GPU; tomoxide가 `CancelToken`을 받는 호출만 도중에 취소된다), **job**(분 단위,
-별도 프로세스). 등급은 op 선언에 고정한다.
+안 GPU; 취소는 다음 progress 호출에서 듣고, tomoxide 호출 안에서는 `CancelToken`을
+받는 center sweep만 듣는다), **job**(분 단위, 별도 프로세스). 등급은 op 선언에
+고정한다.
 
 ## 3. tomoxide 선행 작업
 
@@ -115,9 +116,9 @@ maturin cdylib, `abi3-py312`, feature `cuda`를 tomoxide로 전달. 의존: tomo
   (`.import.lock`) 돌며, tag 확인부터 commit까지 그 lock 안에 있다.
 - `bind`: tomoxide align API(`PreppedStack`, ring, register, `judge_sweep`)와
   필요한 projection만 읽어 prep하는 `prep::frames`의 얇은 wrapper. 무거운 호출은
-  `py.detach`로 GIL을 놓는다. align 커널은 `CancelToken`을 받지 않아 center
-  sweep은 끝까지 돌고, tilt scan은 tilt마다 부르는 callback이 예외를 내면 다음
-  tilt 전에 멈춘다. import progress callback은 GIL을 다시 잡고 호출하며 10 Hz로
+  `py.detach`로 GIL을 놓는다. center sweep은 `CancelToken`을 받아 angle chunk
+  사이에서 멈추고(그 앞의 filter는 끝까지 돈다), tilt scan은 tilt마다 부르는
+  callback이 예외를 내면 다음 tilt 전에 멈춘다. import progress callback은 GIL을 다시 잡고 호출하며 10 Hz로
   제한한다. 배열은 numpy로 복사해 반환한다(numpy crate의 ndarray 0.17과
   tomoxide의 0.16이 달라서; 프로세스 안에서만, MCP로는 나가지 않는다).
 - 오류는 `LaminoPalError` 하위 예외로 변환하며, guard 거부는 `Refused`(이유
@@ -238,7 +239,8 @@ job은 제출할 때 지금 비어 있고 대기 job이 없는 batch GPU를(없�
 ## 6. GUI (napari + silx)
 
 TXM-Pal 구조를 따른다: `gui/ui/main.ui`(Designer), worker thread →
-`silx.gui.utils.concurrent.submitToQtMainThread`.
+`silx.gui.utils.concurrent.submitToQtMainThread`. 한 channel의 호출은
+latest-wins이고, 버튼으로 낸 호출은 그 channel에서 도는 호출을 취소할지 묻는다.
 
 **Viewer.** 이미지와 볼륨은 napari, 1D curve는 silx `Plot1D`가 맡는다.
 
@@ -326,7 +328,7 @@ tilt ✓, z-band ✓, 재구성 n/m. 상태는 project에서 계산하고 따로
    - algorithm/filter/stripe/phase로 단일 slice와 ortho를 미리 본다. algorithm은
      CUDA laminography가 받는 fourierrec, fbp, linerec 셋뿐이다.
    - slider로 바꿀 때는 latest-wins다: 시작 전에 밀린 요청은 건너뛰고, 밀린
-     요청의 결과는 버린다. 이미 도는 요청은 끊지 않는다.
+     요청의 결과는 버린다. 이미 도는 요청은 끊지 않는다(버튼은 묻는다, §6).
    - 비교 모드: variant를 추가하면 napari grid와 ROI 표(signal/noise ROI → CNR,
      noise σ; TXM-Pal `roiTableWidget` 방식)를 보여준다. ROI는 Shapes layer
      하나를 모든 variant에 공유한다.
@@ -491,7 +493,7 @@ skip이 아니라 실패로 처리한다.
 - MCP e2e: stdio client로 rings → sweep → preview → `recon.run` job →
   `job_wait`/`job_cancel`. 이미지 content가 오는지 확인한다.
 - GUI(`tests/test_gui.py`, `QT_QPA_PLATFORM=offscreen`, `QT_API=pyside6`): op마다
-  action, None을 받는 필수 param, latest-wins, 상단 bar의 결정 출처와 다음 탭,
+  action, None을 받는 필수 param, latest-wins와 버튼의 취소 질문, 상단 bar의 결정 출처와 다음 탭,
   instant op figure와 job 끝, Volume slider 한 번에 동기화 한 번과 3D 볼륨,
   Export z 범위가 band를 따르고 손으로 고친 값은 유지. `QT_QPA_OFFSCREEN_NO_GLX=1`로
   DISPLAY와 무관하게 GL 없이 돈다.

@@ -14,6 +14,7 @@ from lamino_pal.mcp import figures
 from lamino_pal.ops.registry import REGISTRY, Result
 from lamino_pal.project import Project
 from lamino_pal.gui.form import ParamsForm
+from lamino_pal.gui.runner import by_hand
 
 # The tab each op belongs to; ops are reached nowhere else but the dialog.
 ACTIONS = {
@@ -103,7 +104,7 @@ class RunOpDialog(qt.QDialog):
         self.doc.setWordWrap(True)
         self.doc.setTextInteractionFlags(qt.Qt.TextSelectableByMouse)
         self.run = qt.QPushButton("Run")
-        self.run.clicked.connect(self._run)
+        self.run.clicked.connect(lambda _=False: by_hand(self._run))
         self.text = qt.QPlainTextEdit(readOnly=True)
         self.image = qt.QLabel()
         self.image.setAlignment(qt.Qt.AlignCenter)

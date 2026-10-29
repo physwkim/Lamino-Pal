@@ -9,6 +9,7 @@ os.environ["QT_QPA_OFFSCREEN_NO_GLX"] = "1"
 os.environ["QT_API"] = "pyside6"
 
 import threading
+import time
 
 import h5py
 import numpy as np
@@ -19,12 +20,12 @@ from silx.gui import qt
 from silx.gui.plot.items import Shape
 from test_recon import _scan
 
-from lamino_pal import _core, dispatch
+from lamino_pal import LaminoPalError, _core, dispatch
 from lamino_pal.artifacts import save_h5
 from lamino_pal.gui import status
 from lamino_pal.gui.actions import ACTIONS, RunOpDialog
 from lamino_pal.gui.form import ParamsForm
-from lamino_pal.gui.runner import Runner
+from lamino_pal.gui.runner import Runner, by_hand
 from lamino_pal.gui.viewer import Viewer
 from lamino_pal.jobs import JobState
 from lamino_pal.ops import REGISTRY
@@ -95,7 +96,8 @@ def test_a_superseded_call_is_skipped_or_its_result_dropped(app, project, monkey
         return params["i"]
 
     monkeypatch.setattr(dispatch, "run", run)
-    runner = Runner(project)
+    asked = []
+    runner = Runner(project, lambda op: asked.append(op) or True)
     # A GPU op: its calls queue on one thread.
     name = next(n for n, o in REGISTRY.items() if o.gpu and o.cost != "job")
     runner.run(name, {"i": 1}, done.append, channel="c")
@@ -106,8 +108,67 @@ def test_a_superseded_call_is_skipped_or_its_result_dropped(app, project, monkey
     assert pump(app, 10, lambda: done)
     pump(app, 0.2)
     runner.shutdown()
-    # 1 ran on and was dropped; 2 was superseded before it started.
-    assert ran == [1, 3] and done == [3]
+    # 1 ran on and was dropped; 2 was superseded before it started. No click
+    # started them, so none asked.
+    assert ran == [1, 3] and done == [3] and asked == []
+
+
+def _blocking_run(started, gate, ran, tokens):
+    """A dispatch.run whose call 1 blocks until `gate` or its cancel."""
+
+    def run(name, params, *, cancel, **kw):
+        ran.append(params["i"])
+        tokens.append(cancel)
+        if params["i"] == 1:
+            started.set()
+            while not (gate.is_set() or cancel.is_cancelled()):
+                time.sleep(0.01)
+            if cancel.is_cancelled():
+                raise LaminoPalError("cancelled")
+        return params["i"]
+
+    return run
+
+
+@pytest.mark.parametrize("answer", [True, False])
+def test_a_click_asks_whether_to_cancel_the_call_running_on_its_channel(app, project, monkeypatch, answer):
+    started, gate, ran, tokens, done, failed, asked = threading.Event(), threading.Event(), [], [], [], [], []
+    monkeypatch.setattr(dispatch, "run", _blocking_run(started, gate, ran, tokens))
+    runner = Runner(project, lambda op: asked.append(op) or answer)
+    name = next(n for n, o in REGISTRY.items() if o.gpu and o.cost != "job")
+    runner.run(name, {"i": 1}, done.append, channel="c", failed=failed.append)
+    assert started.wait(10)
+    by_hand(lambda: runner.run(name, {"i": 2}, done.append, channel="c", failed=failed.append))
+    assert asked == [name] and tokens[0].is_cancelled() == answer
+    gate.set()
+    assert pump(app, 10, lambda: done)
+    pump(app, 0.2)
+    runner.shutdown()
+    # Cancelled or run on, 1 was superseded: its failure or result is dropped.
+    assert ran == [1, 2] and done == [2] and failed == [] and not tokens[1].is_cancelled()
+
+
+def test_a_call_the_question_starts_does_not_ask(app, project, monkeypatch):
+    started, gate, ran, tokens, done, asked = threading.Event(), threading.Event(), [], [], [], []
+    monkeypatch.setattr(dispatch, "run", _blocking_run(started, gate, ran, tokens))
+    name = next(n for n, o in REGISTRY.items() if o.gpu and o.cost != "job")
+
+    def ask(op):
+        # A slider moved while the question is up: its slot runs in the
+        # question's event loop.
+        asked.append(op)
+        runner.run(name, {"i": 3}, done.append, channel="c")
+        return False
+
+    runner = Runner(project, ask)
+    runner.run(name, {"i": 1}, done.append, channel="c")
+    assert started.wait(10)
+    by_hand(lambda: runner.run(name, {"i": 2}, done.append, channel="c"))
+    gate.set()
+    assert pump(app, 10, lambda: done)
+    pump(app, 0.2)
+    runner.shutdown()
+    assert asked == [name] and ran == [1, 3] and done == [3]
 
 
 def test_status_names_how_each_field_was_decided_and_the_next_tab(scene):

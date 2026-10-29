@@ -32,7 +32,7 @@ _open: dict[int, tuple[Path, dict[str, Any], float]] = {}
 
 
 class Cancelled(Exception):
-    """An op call its job's cancel cut short, whatever the op raised."""
+    """An op call its cancel cut short, whatever the op raised."""
 
 
 def log_path(project: Project) -> Path:
@@ -45,7 +45,8 @@ class Context:
 
     project: Project
     caller: Caller
-    progress: Progress
+    progress: Progress  # raises `Cancelled` once `cancel` fired
+    cancel: _core.CancelToken  # for a tomoxide call that takes one
     gpu: int | None = None
 
 
@@ -56,11 +57,13 @@ def run(
     project: Project,
     caller: Caller,
     progress: Progress | None = None,
+    cancel: _core.CancelToken | None = None,
     gpu_wait_s: float = 30.0,
 ) -> Result:
     """Run instant or interactive op `name` here, a GPU op on the project's
-    interactive GPU."""
-    return _run(name, params, project, caller, progress, gpu_wait_s, job=False)
+    interactive GPU. Once `cancel` fires, the op stops at its next progress
+    call and whatever it raises is raised as `Cancelled`."""
+    return _run(name, params, project, caller, progress, gpu_wait_s, job=False, cancel=cancel)
 
 
 def run_job(
@@ -70,12 +73,12 @@ def run_job(
     project: Project,
     caller: Caller,
     progress: Progress | None = None,
-    cancelled: Callable[[], bool] = lambda: False,
+    cancel: _core.CancelToken | None = None,
 ) -> Result:
     """Run job op `name` in this job process, a GPU op on one of the project's
-    batch GPUs, waiting for it as long as other jobs hold it. Once
-    `cancelled()`, whatever the op raises is raised as `Cancelled`."""
-    return _run(name, params, project, caller, progress, None, job=True, cancelled=cancelled)
+    batch GPUs, waiting for it as long as other jobs hold it. `cancel` as
+    `run`'s."""
+    return _run(name, params, project, caller, progress, None, job=True, cancel=cancel)
 
 
 def _run(
@@ -86,13 +89,15 @@ def _run(
     progress: Progress | None,
     gpu_wait_s: float | None,
     job: bool,
-    cancelled: Callable[[], bool] = lambda: False,
+    cancel: _core.CancelToken | None,
 ) -> Result:
-    with logged(name, params, project, caller, cancelled) as entry:
+    if cancel is None:
+        cancel = _core.CancelToken()
+    with logged(name, params, project, caller, cancel.is_cancelled) as entry:
         op = lookup(name, job)
         p = validate(op, params, project)
         entry["params"] = p.model_dump(mode="json")
-        ctx = Context(project, caller, progress or (lambda frac, msg: None))
+        ctx = Context(project, caller, _heeding(cancel, progress), cancel)
         if op.prepare is not None:
             op.prepare(ctx, p)
         lock = nullcontext()
@@ -116,6 +121,16 @@ def _run(
             raise TypeError(f"{name} returned {type(r).__name__}, not {op.result.__name__}")
         entry.update(status="ok", result=r.model_dump(mode="json"))
         return r
+
+
+def _heeding(cancel: _core.CancelToken, progress: Progress | None) -> Progress:
+    def heed(frac: float, msg: str) -> None:
+        if cancel.is_cancelled():
+            raise Cancelled("cancelled")
+        if progress is not None:
+            progress(frac, msg)
+
+    return heed
 
 
 def lookup(name: str, job: bool) -> Op:
@@ -151,8 +166,8 @@ def logged(
     try:
         yield entry
     except BaseException as e:
-        # SIGTERM reaches the op's children too, so whatever the op raises
-        # once the cancel arrived is the cancel's doing.
+        # A tomoxide call that took the cancel raises its own error, and a
+        # job's SIGTERM reaches the op's children too.
         if cancelled():
             entry.update(status="cancelled", error=f"{type(e).__name__}: {e}")
             if isinstance(e, Cancelled):

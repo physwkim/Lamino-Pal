@@ -27,7 +27,7 @@ from typing import Any, Iterator, Literal
 
 from pydantic import BaseModel
 
-from lamino_pal import Refused, artifacts, dispatch
+from lamino_pal import Refused, _core, artifacts, dispatch
 from lamino_pal.dispatch import Caller
 from lamino_pal.ops.registry import REGISTRY, _Out
 from lamino_pal.project import Project
@@ -195,14 +195,12 @@ def run(d: Path) -> int:
     """The job process: run the op `d`'s state names and record how it ended."""
     st = _read(d)
     project = Project(st.project)
-    cancel_ = threading.Event()
-    signal.signal(signal.SIGTERM, lambda *_: cancel_.set())
+    cancel_ = _core.CancelToken()
+    signal.signal(signal.SIGTERM, lambda *_: cancel_.cancel())
     t_start = time.monotonic()
 
     def progress(frac: float, msg: str) -> None:
         nonlocal t_start
-        if cancel_.is_set():
-            raise dispatch.Cancelled("cancelled")
         now = time.monotonic()
         # Each restart from 0 (after a GPU wait, a stack load) restarts the ETA.
         if frac <= 0:
@@ -215,7 +213,7 @@ def run(d: Path) -> int:
     def work() -> None:
         try:
             r = dispatch.run_job(
-                st.op, st.params, project=project, caller=st.caller, progress=progress, cancelled=cancel_.is_set
+                st.op, st.params, project=project, caller=st.caller, progress=progress, cancel=cancel_
             )
             end.update(status="done", progress=1.0, eta_s=0.0, result=r.model_dump(mode="json"))
         except dispatch.Cancelled:
@@ -232,7 +230,7 @@ def run(d: Path) -> int:
     deadline = None
     while w.is_alive():
         w.join(0.2)
-        if cancel_.is_set() and deadline is None:
+        if cancel_.is_cancelled() and deadline is None:
             deadline = time.monotonic() + CANCEL_GRACE_S
         if deadline is not None and w.is_alive() and time.monotonic() >= deadline:
             dispatch.abandon("cancelled", "stopped inside a call")

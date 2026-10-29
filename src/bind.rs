@@ -230,6 +230,28 @@ fn focus_json(f: &TiltFocus) -> Value {
            "depth": f.depth, "focus_by_z": f.focus_by_z})
 }
 
+/// A cancel for a call that takes one: `cancel()` from any thread stops it
+/// at its next check, raising `LaminoPalError("cancelled")`.
+#[pyclass(frozen, module = "lamino_pal._core")]
+#[derive(Default)]
+struct CancelToken(tomoxide::CancelToken);
+
+#[pymethods]
+impl CancelToken {
+    #[new]
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn cancel(&self) {
+        self.0.cancel()
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.0.is_cancelled()
+    }
+}
+
 /// A DXchange file's whole projection stack, prepped, in host memory.
 #[pyclass(frozen, module = "lamino_pal._core")]
 struct Stack(PreppedStack);
@@ -292,16 +314,20 @@ impl Stack {
     }
 
     /// Output slice `slice` reconstructed at every centre of `centers`:
-    /// `(frames [len(centers), ny, nx], focus per centre)`.
+    /// `(frames [len(centers), ny, nx], focus per centre)`. A fired `cancel`
+    /// stops it at its next angle chunk; the filter before them runs whole.
+    #[pyo3(signature = (tilt_deg, slice, centers, cancel=None))]
     fn center_sweep<'py>(
         &self,
         py: Python<'py>,
         tilt_deg: Option<f32>,
         slice: usize,
         centers: Vec<f32>,
+        cancel: Option<&CancelToken>,
     ) -> PyResult<(Bound<'py, PyAny>, Vec<f64>)> {
+        let cancel = cancel.map(|c| &c.0);
         let s = py
-            .detach(|| self.0.center_sweep(tilt_deg, slice, &centers, None))
+            .detach(|| self.0.center_sweep(tilt_deg, slice, &centers, cancel))
             .map_err(tomoxide_err)?;
         Ok((numpy(py, &s.frames)?, s.focus))
     }
@@ -429,6 +455,7 @@ impl Stack {
 }
 
 pub(crate) fn add(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<CancelToken>()?;
     m.add_class::<Stack>()?;
     m.add_function(wrap_pyfunction!(prep_frames, m)?)?;
     m.add_function(wrap_pyfunction!(mean_projection, m)?)?;

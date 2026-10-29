@@ -8,6 +8,7 @@ from typing import Any, Callable
 from silx.gui import qt
 
 from lamino_pal.gui.actions import figure_name, job_figure, save_figure
+from lamino_pal.gui.runner import by_hand
 from lamino_pal.gui.viewer import Viewer
 from lamino_pal.jobs import JobState
 from lamino_pal.ops.registry import Result
@@ -22,7 +23,7 @@ def badge(label: qt.QLabel, text: str, color: str | None = None) -> None:
 
 def button(text: str, slot: Callable[[], None], tip: str = "") -> qt.QPushButton:
     b = qt.QPushButton(text)
-    b.clicked.connect(lambda _=False: slot())
+    b.clicked.connect(lambda _=False: by_hand(slot))
     b.setToolTip(tip)
     return b
 

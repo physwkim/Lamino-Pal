@@ -108,6 +108,17 @@ def test_select_keeps_the_named_projections(turn):
         s.select([16])
 
 
+def test_a_fired_cancel_stops_the_center_sweep(turn):
+    s = _core.Stack(turn)
+    sl = s.default_slice(20.0)
+    frames, focus = s.center_sweep(20.0, sl, [15.5, 16.0], _core.CancelToken())
+    assert frames.shape[0] == len(focus) == 2
+    cancel = _core.CancelToken()
+    cancel.cancel()
+    with pytest.raises(LaminoPalError, match="cancelled"):
+        s.center_sweep(20.0, sl, [15.5, 16.0], cancel)
+
+
 def test_planes_cross_at_the_voxel(turn):
     s = _core.Stack(turn)
     recipe = json.dumps({"algorithm": "fourierrec"})

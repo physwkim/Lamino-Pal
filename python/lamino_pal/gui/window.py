@@ -19,7 +19,7 @@ from lamino_pal.project import Group, Project
 from lamino_pal.gui import status
 from lamino_pal.gui.actions import ACTIONS, RunOpDialog
 from lamino_pal.gui.docks import JobsWidget, LogWidget
-from lamino_pal.gui.runner import Runner, message
+from lamino_pal.gui.runner import Runner, by_hand, message
 from lamino_pal.gui.tabs import TABS
 from lamino_pal.gui.tree import ProjectTree
 
@@ -45,7 +45,7 @@ class MainWindow(qt.QMainWindow):
         self.tag: str | None = None
         self.volume: str | None = None
 
-        self.runner = Runner(project, self)
+        self.runner = Runner(project, self._cancel_running, self)
         self.runner.failed.connect(lambda op, msg: self.statusBar().showMessage(f"{op}: {msg}", 20000))
         self.runner.progressed.connect(self._progress)
         self.jobs = JobsWidget(project)
@@ -68,7 +68,7 @@ class MainWindow(qt.QMainWindow):
         self.splitterMain.setSizes([260, 1340])
 
         self.pushButtonNext.clicked.connect(self._next)
-        self.pushButtonConfirm.clicked.connect(self._confirm)
+        self.pushButtonConfirm.clicked.connect(lambda _=False: by_hand(self._confirm))
         self.actionRunOp.triggered.connect(lambda: RunOpDialog(self, self.current_tab().default_op).show())
         self.actionOpen.triggered.connect(self._open)
         self.actionQuit.triggered.connect(self.close)
@@ -235,6 +235,10 @@ class MainWindow(qt.QMainWindow):
 
     def _next(self) -> None:
         self.show_tab(self._status_now.next_tab)
+
+    def _cancel_running(self, op: str) -> bool:
+        q = f"{op} is still running. Cancel it?"
+        return qt.QMessageBox.question(self, "Lamino-Pal", q) == qt.QMessageBox.Yes
 
     def _confirm(self) -> None:
         """The agent's standing decisions decided again by the user."""

@@ -177,7 +177,7 @@ def center_sweep(ctx: Context, p: SweepParams) -> SweepResult:
     stack = scans.stack(path)
     s = _slice(stack, scan, group, tilt, p.slice)
     ctx.progress(0.3, f"{len(cands)} candidates on slice {s}")
-    frames, focus = stack.center_sweep(tilt, s, cands)
+    frames, focus = stack.center_sweep(tilt, s, cands, ctx.cancel)
     return SweepResult(
         center_from=src,
         tilt_deg=tilt,
