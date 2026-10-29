@@ -198,11 +198,8 @@ class AlignTab(Tab):
         self._sweep = r
         self._show_mode("sweep")
         v = r.verdict
-        frames = r.arrays["frames"]
-        keep = [v.index] + [x.index for x in v.rivals] if v.kind == "ambiguous" else range(len(frames))
-        for i in keep:
-            c = r.candidates_px[i]
-            self._layer(f"c {c:.2f}", frames[i], center_px=c)
+        for c, frame in zip(r.candidates_px, r.arrays["frames"]):
+            self._layer(f"c {c:.2f}", frame, center_px=c)
         self.view.model.layers.selection.active = self.view.model.layers[f"c {r.candidates_px[v.index]:.2f}"]
         self.plot.addCurve(r.candidates_px, r.focus, legend="focus", symbol="o", color="black")
         self.plot.addXMarker(v.center_px, legend="best", text="best", color="green")

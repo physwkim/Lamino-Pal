@@ -298,7 +298,8 @@ tilt ✓, z-band ✓, 재구성 n/m. 상태는 project에서 계산하고 따로
      쓰자고 제안한다.
    - **Center.** sweep 결과의 score curve(silx)와 verdict 배지를 보여준다.
      candidate slice는 napari grid mode에 candidate당 layer 하나로 놓고, layer마다
-     자기 contrast를 쓴다. Ambiguous면 best와 rival만 놓는다. curve를 클릭하면
+     자기 contrast를 쓴다. verdict와 상관없이 모든 candidate를 놓는다: 261003에서
+     눈이 고른 512는 focus best도 rival도 아니었다. curve를 클릭하면
      가장 가까운 candidate layer가 골라진다. 결정은 layer를 고르고 "Decide
      selected center"를 눌러서 한다(고르기만으로는 정하지 않는다). Railed면
      "범위 넓히기" 버튼을 낸다. 그 결과 slice가 비어 있으면(flat) z-band 경고를
@@ -375,7 +376,8 @@ log에 `invalid`로 남는다. 고정 tool로 `project_open`, `project_info`,
   261003의 compare 스크립트처럼 slice마다 한 열에, 원 해상도 s×s 확대를 위에,
   s로 줄인 전체 slice를 아래에 둔다. s는 한 줄이 1568 px에 들어가는 크기이고,
   확대 위치는 0.92-FOV 원 안에서 slice들의 기울기 에너지를 s/4로 매끄럽게 한
-  값이 가장 큰 곳이며, 캡션이 그 좌표를 적는다.
+  값이 가장 큰 곳이며, 캡션이 그 좌표를 적는다. center_sweep은 best, rival과
+  sweep 범위에 고르게 놓인 candidate 5개를 보인다(261003의 눈 비교가 4–5개였다).
 - 이미지는 `artifacts/figures/`에도 저장되고, 캡션이 그 경로를 적어
   `group_decide` 근거로 인용하게 한다. job op의 이미지는 `job_result`가
   artifact에서 그린다.

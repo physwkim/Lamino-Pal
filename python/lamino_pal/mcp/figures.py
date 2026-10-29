@@ -16,6 +16,10 @@ from lamino_pal.render import GAP, LONG_SIDE, grid, png, to_u8, window
 
 Arrays = dict[str, np.ndarray]
 FIGURES = Path("artifacts/figures")  # under the work directory
+# The sweep candidates shown evenly spaced over its range, as the 261003 eye
+# comparisons were: the eye picked 512 there, neither the focus best nor a
+# rival, and 460/464 on a curve railed at 472.
+SPREAD = 5
 _FIGURES: dict[str, Callable[[dict[str, Any], Arrays], tuple[np.ndarray, str]]] = {}
 
 
@@ -115,12 +119,17 @@ def _mean(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
 @_figure("align.center_sweep")
 def _sweep(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
     v, c, f = r["verdict"], r["candidates_px"], r["focus"]
-    role = {0: "first", len(c) - 1: "last", v["index"]: "best"}
-    role.update({x["index"]: "rival" for x in v["rivals"]})
+    n = len(c)
+    role = dict.fromkeys(np.linspace(0, n - 1, min(n, SPREAD)).round().astype(int).tolist(), "")
+    role.update({x["index"]: "rival, " for x in v["rivals"]})
+    role[v["index"]] = "best, "
     keep = sorted(role)
-    labels = [f"center {c[i]:.2f} px ({role[i]}, focus {f[i]:.4g})" for i in keep]
+    labels = [f"center {c[i]:.2f} px ({role[i]}focus {f[i]:.4g})" for i in keep]
     img, zoom, lines = _tiles(a["frames"][keep], labels)
-    head = f"Slice {r['slice']} at tilt {r['tilt_deg']:g} for the best, rival and edge candidates, left to right"
+    head = (
+        f"Slice {r['slice']} at tilt {r['tilt_deg']:g} for {len(keep)} of the {n} candidates, the best, its rivals"
+        f" and {min(n, SPREAD)} evenly spaced over the sweep, left to right"
+    )
     return img, f"{head}, {zoom}:\n{lines}"
 
 

@@ -22,6 +22,7 @@ from lamino_pal.gui.actions import ACTIONS, RunOpDialog
 from lamino_pal.gui.form import ParamsForm
 from lamino_pal.gui.runner import Runner
 from lamino_pal.ops import REGISTRY
+from lamino_pal.ops.align import Rival, SweepResult, Verdict
 
 
 @pytest.fixture(scope="module")
@@ -145,6 +146,21 @@ def test_an_instant_op_shows_its_figure_and_a_job_its_end(app, win):
     rows = [win.jobs.table.item(r, 0).text() for r in range(win.jobs.table.rowCount())]
     assert st.id in rows
     dialog.close()
+
+
+def test_an_ambiguous_sweep_shows_every_candidate_to_pick_by_eye(app, win):
+    rival = Rival(index=0, center_px=63.0, prominence=1.0, deficit=0.01)
+    r = SweepResult(
+        center_from="params",
+        tilt_deg=20.0,
+        slice=3,
+        depth=8,
+        candidates_px=[63.0, 64.0, 65.0, 66.0],
+        focus=[1.0, 0.5, 1.01, 0.9],
+        verdict=Verdict(kind="ambiguous", index=2, center_px=65.0, rivals=[rival]),
+    ).with_arrays(frames=np.random.default_rng(0).random((4, 8, 8), dtype="f4"))
+    win.tabs["Align"]._show_sweep(r)
+    assert names(win.tabs["Align"].view) == ["c 63.00", "c 64.00", "c 65.00", "c 66.00"]
 
 
 def test_the_volume_planes_follow_one_slider_once_and_3d_shows_the_binned_volume(app, win):

@@ -217,6 +217,20 @@ def test_slices_compared_by_eye_show_their_detail_zoomed_at_full_resolution():
     assert caption.splitlines()[1].startswith("- tilt 18 deg, slice 5 (focus 1), zoom window [")
 
 
+def test_a_sweep_shows_its_best_rivals_and_candidates_spread_over_its_range():
+    c = [976.0 + i for i in range(49)]
+    frames = np.random.default_rng(0).random((49, 32, 32), dtype="f4")
+    verdict = {"kind": "ambiguous", "index": 10, "rivals": [{"index": 30}]}
+    r = {"slice": 7, "tilt_deg": 20.0, "candidates_px": c, "focus": [1.0] * 49, "verdict": verdict}
+    _, caption = figures.render("align.center_sweep", r, {"frames": frames})
+    head, *lines = caption.splitlines()
+    assert "for 7 of the 49 candidates, the best, its rivals and 5 evenly spaced over the sweep" in head
+    shown = [float(re.match(r"- center (\S+) px", line).group(1)) for line in lines]
+    assert shown == [976.0, 986.0, 988.0, 1000.0, 1006.0, 1012.0, 1024.0]
+    assert lines[1].startswith("- center 986.00 px (best, focus 1)") and "(rival, focus 1)" in lines[4]
+    assert lines[0].startswith("- center 976.00 px (focus 1)")
+
+
 async def test_project_open_opens_or_creates_and_resources_follow_it(project, tmp_path):
     other = tmp_path / "other" / "project.toml"
     raw = tmp_path / "raw2"
