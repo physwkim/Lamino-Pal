@@ -301,7 +301,7 @@ impl Stack {
         centers: Vec<f32>,
     ) -> PyResult<(Bound<'py, PyAny>, Vec<f64>)> {
         let s = py
-            .detach(|| self.0.center_sweep(tilt_deg, slice, &centers))
+            .detach(|| self.0.center_sweep(tilt_deg, slice, &centers, None))
             .map_err(tomoxide_err)?;
         Ok((numpy(py, &s.frames)?, s.focus))
     }
@@ -406,18 +406,19 @@ impl Stack {
         let band = band.map(|(z, tilt_deg)| SampleBand { z, tilt_deg });
         let mut raised = None;
         let r = py.detach(|| {
-            self.0.tilt_scan(center, &tilts, band, &mut |f, views| {
-                let Some(cb) = &on_tilt else { return Ok(()) };
-                Python::attach(|py| -> PyResult<()> {
-                    let (slice, xz) = (numpy(py, &views.slice)?, numpy(py, &views.xz)?);
-                    cb.call1(py, (focus_json(f).to_string(), slice, xz))?;
-                    Ok(())
+            self.0
+                .tilt_scan(center, &tilts, band, None, &mut |f, views| {
+                    let Some(cb) = &on_tilt else { return Ok(()) };
+                    Python::attach(|py| -> PyResult<()> {
+                        let (slice, xz) = (numpy(py, &views.slice)?, numpy(py, &views.xz)?);
+                        cb.call1(py, (focus_json(f).to_string(), slice, xz))?;
+                        Ok(())
+                    })
+                    .map_err(|e| {
+                        raised = Some(e);
+                        Error::Backend("on_tilt raised".into())
+                    })
                 })
-                .map_err(|e| {
-                    raised = Some(e);
-                    Error::Backend("on_tilt raised".into())
-                })
-            })
         });
         if let Some(e) = raised {
             return Err(e);
