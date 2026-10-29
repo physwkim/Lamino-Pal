@@ -173,10 +173,11 @@ FAKE_RECON = """
 import json, sys, h5py, numpy as np
 a = sys.argv
 out, config = a[a.index("--output") + 1], a[a.index("--config") + 1]
+out = out if out.endswith(".h5") else out + ".h5"  # as tomoxide's H5Writer
 print("recon: config", open(config).read().strip(), flush=True)
 for end in (4, 8):
     print(json.dumps({"start": end - 4, "end": end, "total": 8, "secs": end / 2}), flush=True)
-with h5py.File(out + ".h5", "w") as f:
+with h5py.File(out, "w") as f:
     f["exchange/data"] = np.zeros((8, 4, 4), "f4")
 """
 

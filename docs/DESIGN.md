@@ -108,8 +108,8 @@ maturin cdylib, `abi3-py312`, feature `cuda`를 tomoxide로 전달. 의존: tomo
   `theta = linspace(0, R, N, endpoint=False)`, `R = round(N·speed·exptime)`,
   R ∉ {180, 360}이면 거부. dark = 0, b×b mean binning, saturation 수 보고, h5의
   `/lamino_pal` group에 attribute `binning, source, energy_ev, kind` 기록. 출력
-  경로가 raw root 아래면 거부. 출력은 `.<name>.part`에 쓰고 rename하므로 실패나
-  취소 뒤에 반쪽 파일이 남지 않는다. `scan.import`는 project당 하나씩
+  경로가 raw root 아래면 거부. 출력은 `artifacts.written`의 `.<stem>.part<suffix>`에
+  쓰고 rename하므로 실패나 취소 뒤에 반쪽 파일이 남지 않는다. `scan.import`는 project당 하나씩
   (`.import.lock`) 돌며, tag 확인부터 commit까지 그 lock 안에 있다.
 - `bind`: tomoxide align API(`PreppedStack`, ring, register, `judge_sweep`)와
   필요한 projection만 읽어 prep하는 `prep::frames`의 얇은 wrapper. 무거운 호출은
@@ -209,6 +209,8 @@ params와 출력 경로는 제출할 때 검사하고, 대기 중인 job과 같�
   foreground로 돌린다.
 - 취소는 자기 job의 process group에 SIGTERM을 보낸다. op는 다음 progress 호출에서
   멈추고, tomoxide 호출 안에서 10초 넘게 못 멈추면 job 프로세스가 스스로 끝난다.
+  그때 finally가 돌지 않으므로, 열려 있는 scratch 파일(`artifacts.scratch`: 모든
+  `.part`와 recon.run의 config)은 `artifacts.discard`가 지운다.
 - 완료 시 출력 h5에 `/lamino_pal/provenance`(center_px, tilt, params, source,
   tomoxide 버전, 명령줄)를 쓴다.
 - 출력 이름 규칙은 기존 것을 따른다:

@@ -12,6 +12,7 @@ import h5py
 from pydantic import BaseModel, Field
 
 from lamino_pal import Refused, _core
+from lamino_pal.artifacts import written
 from lamino_pal.dispatch import Context
 from lamino_pal.ops.registry import InPath, OptOutPath, OutputParams, Params, Result, op
 from lamino_pal.project import Group, ProjectFile, Scan, Tag, is_under
@@ -122,16 +123,16 @@ def import_(ctx: Context, p: ImportParams) -> ImportResult:
         existed = out.exists()
         if existed and not p.overwrite:
             raise Refused(f"out: {out} exists; pass overwrite to replace it")
-        out.parent.mkdir(parents=True, exist_ok=True)
-        r = json.loads(
-            _core.bl7c_import(
-                str(ctx.project.raw_root),
-                p.raw,
-                p.out,
-                p.bin,
-                lambda done, total: ctx.progress(done / total, f"{done}/{total} frames"),
+        with written(out) as part:
+            r = json.loads(
+                _core.bl7c_import(
+                    str(ctx.project.raw_root),
+                    p.raw,
+                    str(part),
+                    p.bin,
+                    lambda done, total: ctx.progress(done / total, f"{done}/{total} frames"),
+                )
             )
-        )
         scan = RawScan(**r["scan"])
         h5 = _relative(ctx, p.out)
         entry = Scan(tag=p.tag, kind=scan.kind, raw=scan.raw, h5=h5, bin=p.bin)

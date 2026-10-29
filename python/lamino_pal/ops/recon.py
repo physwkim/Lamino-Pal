@@ -9,7 +9,6 @@ sets the scan, its geometry and the output itself.
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -24,7 +23,7 @@ from pydantic import AfterValidator, BaseModel, Field, model_validator
 
 import lamino_pal
 from lamino_pal import LaminoPalError, Refused, _core, scans, units
-from lamino_pal.artifacts import save_h5
+from lamino_pal.artifacts import save_h5, scratch, written
 from lamino_pal.dispatch import Context
 from lamino_pal.ops.align import _decided_center, _slice, _stem, _tilt
 from lamino_pal.ops.registry import OptOutPath, OutputParams, Params, Result, op
@@ -430,16 +429,13 @@ def run(ctx: Context, p: RunParams) -> RunResult:
     ctx.progress(0.0, "building the tomoxide CLI")
     exe = tomoxide_cli()
     out = Path(p.out)
-    # The CLI appends .h5 to its output base.
-    part = out.with_name(f".{out.stem}.part")
-    part_h5 = part.with_name(part.name + ".h5")
-    config = out.with_name(f".{out.stem}.toml")
-    argv = [str(exe), "--backend", "cuda", "recon", str(path), "--config", str(config)]
-    argv += ["--center", repr(units.center_for_scan(scan, p.center_px)), "--lamino_angle", repr(p.tilt_deg)]
-    argv += ["--save_format", "h5", "--output", str(part), "--progress_json"]
     tail: deque[str] = deque(maxlen=40)
     done = (0, 1, 0.0)
-    try:
+    # The part ends in .h5, which the CLI keeps instead of appending one.
+    with written(out) as part, scratch(out.with_name(f".{out.stem}.toml")) as config:
+        argv = [str(exe), "--backend", "cuda", "recon", str(path), "--config", str(config)]
+        argv += ["--center", repr(units.center_for_scan(scan, p.center_px)), "--lamino_angle", repr(p.tilt_deg)]
+        argv += ["--save_format", "h5", "--output", str(part), "--progress_json"]
         config.write_text(tomli_w.dumps(p.recipe))
         proc = subprocess.Popen(
             argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
@@ -461,7 +457,7 @@ def run(ctx: Context, p: RunParams) -> RunResult:
                 proc.wait()
         if rc != 0:
             raise LaminoPalError(f"tomoxide recon exited {rc}:\n" + "\n".join(tail))
-        with h5py.File(part_h5, "r+") as f:
+        with h5py.File(part, "r+") as f:
             shape = f["exchange/data"].shape
             prov = f.require_group("lamino_pal/provenance")
             prov.attrs.update(
@@ -474,10 +470,6 @@ def run(ctx: Context, p: RunParams) -> RunResult:
                 tomoxide=_core.tomoxide_rev(),
                 argv=json.dumps(argv),
             )
-        os.replace(part_h5, out)
-    finally:
-        part_h5.unlink(missing_ok=True)
-        config.unlink(missing_ok=True)
     return RunResult(
         center_px=p.center_px,
         tilt_deg=p.tilt_deg,

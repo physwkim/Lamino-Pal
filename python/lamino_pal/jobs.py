@@ -27,7 +27,7 @@ from typing import Any, Iterator, Literal
 
 from pydantic import BaseModel
 
-from lamino_pal import Refused, dispatch
+from lamino_pal import Refused, artifacts, dispatch
 from lamino_pal.dispatch import Caller
 from lamino_pal.ops.registry import REGISTRY, _Out
 from lamino_pal.project import Project
@@ -236,6 +236,7 @@ def run(d: Path) -> int:
             deadline = time.monotonic() + CANCEL_GRACE_S
         if deadline is not None and w.is_alive() and time.monotonic() >= deadline:
             dispatch.abandon("cancelled", "stopped inside a call")
+            artifacts.discard()
             _update(d, status="cancelled", message="stopped inside a call", finished=_now())
             sys.stdout.flush()
             os._exit(128 + signal.SIGTERM)

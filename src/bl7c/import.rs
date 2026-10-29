@@ -2,7 +2,7 @@
 //! wrote them: u16 `exchange/{data, data_white, data_dark}` with an all-zero
 //! dark (the sets have no dark frames) and f32 `exchange/theta` in degrees.
 
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
@@ -31,7 +31,8 @@ pub struct Imported {
 
 /// Import the scan at `raw` under `root` to `out`, `bin`×`bin` mean binned.
 ///
-/// `out` appears only complete: it is written beside itself and renamed.
+/// `out` is written in place and left half written on an error: the caller
+/// names a scratch file and renames it.
 /// `progress(done, total)` runs after every batch of frames; false aborts.
 pub fn import(
     root: &Path,
@@ -44,7 +45,7 @@ pub fn import(
         return Err(Error::Refused("bin must be at least 1".into()));
     }
     let lay = open(root, raw)?;
-    let (Some(parent), Some(name)) = (out.parent(), out.file_name()) else {
+    let (Some(parent), Some(_)) = (out.parent(), out.file_name()) else {
         return Err(Error::Refused(format!(
             "{} is not a file path",
             out.display()
@@ -64,11 +65,7 @@ pub fn import(
         )));
     }
     let shape = [lay.scan.n, h / bin, w / bin];
-    let part = Part(Some(
-        parent.join(format!(".{}.part", name.to_string_lossy())),
-    ));
-    let saturated = write(part.path(), &lay, (h, w), bin, shape, progress)?;
-    part.commit(out)?;
+    let saturated = write(out, &lay, (h, w), bin, shape, progress)?;
     Ok(Imported {
         saturated_frac: saturated as f64 / (lay.scan.n * h * w) as f64,
         scan: lay.scan,
@@ -76,29 +73,6 @@ pub fn import(
         shape,
         saturated,
     })
-}
-
-/// The unfinished output: removed on drop unless `commit` renamed it.
-struct Part(Option<PathBuf>);
-
-impl Part {
-    fn path(&self) -> &Path {
-        self.0.as_deref().expect("set until commit")
-    }
-
-    fn commit(mut self, out: &Path) -> Result<(), Error> {
-        fs::rename(self.path(), out).map_err(|e| Error::Io(out.to_owned(), e))?;
-        self.0 = None;
-        Ok(())
-    }
-}
-
-impl Drop for Part {
-    fn drop(&mut self) {
-        if let Some(p) = &self.0 {
-            let _ = fs::remove_file(p);
-        }
-    }
 }
 
 fn write(
@@ -211,6 +185,7 @@ fn read_frame(path: &Path) -> Result<(usize, usize, Vec<u16>), Error> {
 mod tests {
     use super::super::tests::tempdir;
     use super::*;
+    use std::fs;
     use tiff::encoder::{colortype::Gray16, TiffEncoder};
 
     fn tif(path: &Path, h: usize, w: usize, px: impl Fn(usize) -> u16) {
@@ -265,7 +240,6 @@ mod tests {
         assert_eq!((r.shape, r.saturated, r.bin), ([4, 2, 2], 1, 2));
         assert_eq!(r.saturated_frac, 1.0 / 80.0);
         assert_eq!(seen, [(4, 5), (5, 5)]);
-        assert!(!work.join(".f.h5.part").exists());
 
         let f = H5File::open(&out).unwrap();
         let (shape, data) = read::<u16>(&f, "exchange/data");
@@ -295,7 +269,7 @@ mod tests {
     }
 
     #[test]
-    fn an_abort_or_a_bad_frame_leaves_no_output() {
+    fn an_abort_or_a_bad_frame_is_an_error() {
         let tmp = tempdir();
         let (root, work) = (tmp.join("raw"), tmp.join("work"));
         fly(&root);
@@ -314,7 +288,6 @@ mod tests {
                 .ends_with("4x4, not 5x4 as the first projection"),
             "{e}"
         );
-        assert_eq!(fs::read_dir(&work).unwrap().count(), 0);
     }
 
     #[test]

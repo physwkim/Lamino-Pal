@@ -127,9 +127,9 @@ def test_a_job_whose_op_fails_because_the_cancel_killed_its_child_is_cancelled(p
     assert last_log(project)["status"] == "cancelled"
 
 
-def test_a_job_deaf_inside_a_call_is_stopped_after_the_grace(project):
+def test_a_job_deaf_inside_a_call_is_stopped_after_the_grace_and_leaves_no_part(project):
     st = jobs.submit(project, "test.steps", {"n": 1, "dt": 60}, "cli")
-    until(lambda: jobs.get(project, st.id).status == "running")
+    until((project.work_dir / "artifacts/.steps1.part.txt").exists)
     t0 = time.monotonic()
     jobs.cancel(project, st.id)
     st = jobs.wait(project, st.id, 20)
@@ -137,6 +137,7 @@ def test_a_job_deaf_inside_a_call_is_stopped_after_the_grace(project):
     assert time.monotonic() - t0 < 5
     entry = last_log(project)
     assert (entry["op"], entry["status"], entry["error"]) == ("test.steps", "cancelled", "stopped inside a call")
+    assert list((project.work_dir / "artifacts").iterdir()) == []
     until(lambda: gone(st.pid))
 
 
