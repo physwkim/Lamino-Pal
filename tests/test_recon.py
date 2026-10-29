@@ -149,9 +149,10 @@ def test_split_reconstructs_each_half_alone(project, run_job):
     _decide(project, "s", center_px=160.5)
     r = run_job(project, "recon.split", {"tag": "s", "recipe": {"algorithm": "fourierrec"}})
     assert r.nproj == (8, 8)
-    assert len(r.frc) == 80 and r.radius_px >= 32
-    _, arrays = load_h5(r.artifacts[0])
-    assert arrays["slice"].shape == (2, 160, 160)
+    assert r.radius_px >= 32
+    meta, arrays = load_h5(r.artifacts[0])
+    assert arrays["slice"].shape == (2, 160, 160) and arrays["frc"].shape == (80,)
+    assert "frc" not in meta
     # The halves differ: neither is the whole scan reconstructed twice.
     assert not np.array_equal(arrays["slice"][0], arrays["slice"][1])
     with pytest.raises(Refused, match="outside the"):

@@ -68,7 +68,8 @@ def test_focus_by_z_scores_every_slice_and_finds_the_textured_band(project, step
         progress=lambda f, m: seen.append(m),
     )
     # Chunked reads score each slice as one call over the whole volume does.
-    np.testing.assert_array_equal(r.focus, _core.focus_by_z(vol[::step].copy()))
+    np.testing.assert_array_equal(r.arrays["focus"], _core.focus_by_z(vol[::step].copy()))
+    assert "focus" not in r.model_dump()
     assert r.band == (40, 98 + (step == 1)) and 40 <= r.peak_z <= 99
     assert (r.air, r.wrap) == ([(0, 38 + (step == 1)), (100, 148 + (step == 1))], None)
     assert seen[-1] == "slice 150/150"
@@ -104,7 +105,8 @@ def test_valid_fov_takes_the_scan_center_and_tilt_from_the_provenance(project):
     r = run(project, "volume.valid_fov", volume=path)
     want = json.loads(_core.valid_fov(64, 32, 32.0, 20.0))
     assert (r.tag, r.center_px, r.tilt_deg) == ("s", 64.5, 20.0)
-    assert (r.r_lateral, r.radius, r.full_z) == (want["r_lateral"], want["radius"], tuple(want["full_z"]))
+    assert (r.r_lateral, r.full_z) == (want["r_lateral"], tuple(want["full_z"]))
+    assert r.arrays["radius"].tolist() == want["radius"] and "radius" not in r.model_dump()
     with pytest.raises(Refused, match=f"is {depth}x64x64; scan s at tilt 30.0 reconstructs"):
         run(project, "volume.valid_fov", volume=path, tilt_deg=30.0)
 
@@ -129,4 +131,4 @@ def test_valid_fov_of_the_bin2_final(golden_project):
     path = str(DATA / "tomoxide/final_step1000_bin2_c504_t20_fourierrec_parzen.h5")
     r = run(golden_project, "volume.valid_fov", volume=path, tag="step1000", center_px=1008.5, tilt_deg=20.0)
     # Bin-2 column 504 of 1024: the width allows 504 px, full at slices 184..906.
-    assert (r.r_lateral, len(r.radius), r.full_z) == (504.0, 1090, (184, 906))
+    assert (r.r_lateral, len(r.arrays["radius"]), r.full_z) == (504.0, 1090, (184, 906))

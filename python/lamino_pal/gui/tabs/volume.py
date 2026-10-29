@@ -234,7 +234,7 @@ class VolumeTab(Tab):
             return
         nz, ny, nx = self.shape
         z, _, _ = self.at
-        rad = r.radius[z]
+        rad = r.arrays["radius"][z]
         cy, cx = ny / 2, nx / 2
         disk = [np.array([[cy - rad, cx - rad], [cy + rad, cx + rad]])] if rad > 0 else []
         _fill(self.views["z"], "fov", disk, "ellipse")
@@ -258,13 +258,14 @@ class VolumeTab(Tab):
         self.plot.clear()
         spans = figures.shaded(r.band, r.air, r.wrap)
         self.plot.setGraphTitle(figures.shades_key(spans))
-        top = max(r.focus, default=0.0)
+        f = r.arrays["focus"]
+        top = max(f, default=0.0)
         for k, v in spans.items():
             for i, (a, b) in enumerate(v):
                 color = figures.SHADES[k][0]
                 self.plot.addShape((a, b), (0, top), legend=f"{k} {i}", shape="rectangle", color=color, z=0)
-        z = np.arange(len(r.focus)) * r.step
-        self.plot.addCurve(z, r.focus, legend="focus", color="black")
+        z = np.arange(len(f)) * r.step
+        self.plot.addCurve(z, f, legend="focus", color="black")
         self.plot.addXMarker(r.peak_z, legend="peak", text="peak", color="gray")
         self.plot.getXAxis().setLabel("slice z")
         self.plot.getYAxis().setLabel("focus (mean |∇|²)")

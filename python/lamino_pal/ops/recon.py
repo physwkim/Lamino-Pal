@@ -275,7 +275,6 @@ class SplitResult(Result):
     nproj: tuple[int, int]  # (even, odd)
     radius_px: float  # of the disk every projection saw at z
     correlation: float  # Pearson, inside the disk
-    frc: list[float]  # per ring of 1/n cycles per pixel
     resolution_px: float | None  # 1 / the first frequency below 1/7
 
 
@@ -317,7 +316,7 @@ def split(ctx: Context, p: SplitParams) -> SplitResult:
     both halves show is the sample, what one shows is noise or artifact.
     Reports their Pearson correlation and Fourier ring correlation, with the
     resolution where it falls below 1/7. Arrays in `out`: `slice` [half, y,
-    x], `xz` [half, z, x]."""
+    x], `xz` [half, z, x], `frc` [ring], ring k at k/n cycles per pixel."""
     scan, group, stack = _stack(ctx, p.tag)
     nproj, nz, n = stack.shape
     z, y, x = _at(stack, scan, group, p, p.z, p.y)
@@ -346,11 +345,10 @@ def split(ctx: Context, p: SplitParams) -> SplitResult:
         nproj=tuple(counts),
         radius_px=radius,
         correlation=pearson,
-        frc=curve.tolist(),
         resolution_px=n / (below[0] + 1) if below.size else None,
         artifacts=[p.out],
     )
-    arrays = {"slice": np.stack(slices), "xz": np.stack(xzs)}
+    arrays = {"slice": np.stack(slices), "xz": np.stack(xzs), "frc": curve}
     save_h5(p.out, r.model_dump(mode="json", exclude={"artifacts"}), **arrays)
     return r.with_arrays(**arrays)
 

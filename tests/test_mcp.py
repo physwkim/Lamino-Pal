@@ -282,9 +282,9 @@ def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_below_its_slice():
 
 def test_a_focus_curve_shades_its_band_air_and_z_wrap():
     f = [0.3] * 30 + [0.01] * 40 + [1.0] * 80
-    r = {"step": 1, "shape": [150, 8, 8], "focus": f, "peak_z": 70}
+    r = {"step": 1, "shape": [150, 8, 8], "peak_z": 70}
     r |= {"band": [70, 149], "air": [[30, 69]], "wrap": [0, 29]}
-    image, caption = figures.render("volume.focus_by_z", r, {})
+    image, caption = figures.render("volume.focus_by_z", r, {"focus": np.array(f)})
     assert "suggested band [70, 149] (gray), air [30, 69] (blue), z wrap [0, 29] (orange)," in caption
     im = np.asarray(Image.open(io.BytesIO(image)).convert("RGB"))
     for color, _ in figures.SHADES.values():

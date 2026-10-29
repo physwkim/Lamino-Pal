@@ -98,10 +98,14 @@ def test_tilt_scan_carries_the_band_to_each_tilt(mount, run_job):
     meta, arrays = load_h5(r.artifacts[0])
     assert r.artifacts[0].endswith("artifacts/step1000_tilts_cgroup_t18-22.h5")
     assert meta["center_px"] == 1008.5 and arrays["best"].shape == (3, 1024, 1024)
-    # Each tilt's xz plane over its own depth, NaN below it.
-    assert arrays["xz"].shape == (3, 1106, 1024)
-    for x, t in zip(arrays["xz"], r.tilts):
+    # Each tilt's xz plane and focus curve over its own depth, NaN below it;
+    # the curves stay out of the result.
+    assert (arrays["xz"].shape, arrays["focus_by_z"].shape) == ((3, 1106, 1024), (3, 1106))
+    for x, f, t in zip(arrays["xz"], arrays["focus_by_z"], r.tilts):
         assert np.isfinite(x[: t.depth]).all() and np.isnan(x[t.depth :]).all()
+        assert np.isfinite(f[: t.depth]).all() and np.isnan(f[t.depth :]).all()
+        assert t.band[0] + np.argmax(f[t.band[0] : t.band[1] + 1]) == t.z_peak
+    assert all("focus_by_z" not in t for t in meta["tilts"])
 
 
 @pytest.mark.golden
@@ -112,3 +116,5 @@ def test_center_compare_keeps_each_centers_best_slice(mount, run_job):
     assert all(420 <= c.z_peak < 600 for c in r.centers)
     meta, arrays = load_h5(r.artifacts[0])
     assert arrays["best"].shape == (2, 1024, 1024) and meta["tilt_deg"] == 20.0
+    assert arrays["focus_by_z"].shape == (2, 1090)
+    assert all("focus_by_z" not in c for c in meta["centers"])

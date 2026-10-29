@@ -8,7 +8,7 @@ group stores them; slices and z rows are the scan's own reconstruction rows.
 from __future__ import annotations
 
 import json
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 from pydantic import BaseModel, Field
@@ -214,7 +214,6 @@ class TiltFocus(BaseModel):
     z_peak: int
     band: tuple[int, int] | None
     depth: int
-    focus_by_z: list[float]
 
 
 class TiltScanResult(Result):
@@ -241,8 +240,8 @@ def tilt_scan(ctx: Context, p: TiltScanParams) -> TiltScanResult:
     slice, inside the group's z band carried to that tilt, and its xz plane
     through the middle row. Decide the tilt by eye on the slices and xz planes
     in `out`: the focus value grows with tilt on the 261003 sample and does not
-    pick it. Arrays in `out`: `best` [tilt, y, x], `xz` [tilt, z, x], each
-    tilt's first `depth` rows and NaN below them."""
+    pick it. Arrays in `out`: `best` [tilt, y, x], `xz` [tilt, z, x] and
+    `focus_by_z` [tilt, z], each tilt's first `depth` rows and NaN below them."""
     scan, path = scans.find(ctx.project, p.tag)
     group = scans.group_of(ctx.project, scan)
     c = _decided_center(scan, group, p.center_px)
@@ -259,13 +258,20 @@ def tilt_scan(ctx: Context, p: TiltScanParams) -> TiltScanResult:
         ctx.progress(len(best) / len(p.tilts_deg), f"tilt {f['tilt_deg']:g}: z {f['z_peak']}")
 
     foci = json.loads(stack.tilt_scan(units.center_for_scan(scan, c), p.tilts_deg, band, on_tilt))
+    curves = [f.pop("focus_by_z") for f in foci]
     r = TiltScanResult(center_px=c, tilts=[TiltFocus(**f) for f in foci], artifacts=[p.out])
-    stacked = np.stack(best)
-    planes = np.full((len(xz), max(len(x) for x in xz), stacked.shape[2]), np.nan, np.float32)
-    for x, plane in zip(planes, xz):
-        x[: len(plane)] = plane
-    save_h5(p.out, r.model_dump(mode="json", exclude={"artifacts"}), best=stacked, xz=planes)
-    return r.with_arrays(best=stacked, xz=planes)
+    arrays = {"best": np.stack(best), "xz": _padded(xz), "focus_by_z": _padded(curves)}
+    save_h5(p.out, r.model_dump(mode="json", exclude={"artifacts"}), **arrays)
+    return r.with_arrays(**arrays)
+
+
+def _padded(rows: list[Any]) -> np.ndarray:
+    """`rows` stacked, each NaN-padded along its first axis to the longest."""
+    rows = [np.asarray(x) for x in rows]
+    out = np.full((len(rows), max(len(x) for x in rows), *rows[0].shape[1:]), np.nan, rows[0].dtype)
+    for o, x in zip(out, rows):
+        o[: len(x)] = x
+    return out
 
 
 class CompareParams(OutputParams):
@@ -280,7 +286,6 @@ class CenterFocus(BaseModel):
     focus: float
     z_peak: int
     band: tuple[int, int] | None
-    focus_by_z: list[float]
 
 
 class CompareResult(Result):
@@ -306,7 +311,8 @@ def center_compare(ctx: Context, p: CompareParams) -> CompareResult:
     """Reconstruct scan `tag` fully at each center of `centers_px` and keep
     each one's best slice inside the group's z band, to compare by eye the
     candidates a sweep left (an ambiguous verdict's rivals), each image on its
-    own p0.5–p99.5 window. Arrays in `out`: `best` [center, y, x]."""
+    own p0.5–p99.5 window. Arrays in `out`: `best` [center, y, x] and
+    `focus_by_z` [center, z]."""
     scan, path = scans.find(ctx.project, p.tag)
     group = scans.group_of(ctx.project, scan)
     tilt = _tilt(group, p.tilt_deg)
@@ -314,16 +320,16 @@ def center_compare(ctx: Context, p: CompareParams) -> CompareResult:
     stack = scans.stack(path)
     band = _band(stack, scan, group)
     best: list[np.ndarray] = []
+    curves: list[list[float]] = []
     centers = []
     for c in p.centers_px:
         f = json.loads(
             stack.tilt_scan(units.center_for_scan(scan, c), [tilt], band, lambda f, s, xz: best.append(s))
         )[0]
-        centers.append(
-            CenterFocus(center_px=c, focus=f["focus"], z_peak=f["z_peak"], band=f["band"], focus_by_z=f["focus_by_z"])
-        )
+        curves.append(f["focus_by_z"])
+        centers.append(CenterFocus(center_px=c, focus=f["focus"], z_peak=f["z_peak"], band=f["band"]))
         ctx.progress(len(centers) / len(p.centers_px), f"center {c:g}: z {f['z_peak']}")
     r = CompareResult(tilt_deg=tilt, centers=centers, artifacts=[p.out])
-    stacked = np.stack(best)
-    save_h5(p.out, r.model_dump(mode="json", exclude={"artifacts"}), best=stacked)
-    return r.with_arrays(best=stacked)
+    arrays = {"best": np.stack(best), "focus_by_z": np.array(curves)}
+    save_h5(p.out, r.model_dump(mode="json", exclude={"artifacts"}), **arrays)
+    return r.with_arrays(**arrays)

@@ -231,7 +231,7 @@ def _focus(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
 
-    f = np.asarray(r["focus"])
+    f = a["focus"]
     z = np.arange(f.size) * r["step"]
     fig = Figure(figsize=(10, 3.5), dpi=100, layout="constrained")
     canvas = FigureCanvasAgg(fig)

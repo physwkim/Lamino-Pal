@@ -251,7 +251,7 @@ class PreviewTab(Tab):
         else:
             self.cnr.hide()
             self.frc.clear()
-            f = r["frc"]
+            f = a["frc"]
             n = len(f)
             self.frc.addCurve(np.arange(n) / (2 * n), f, legend="FRC", color="black")
             self.frc.addYMarker(1 / 7, legend="1/7", text="1/7", color="gray")

@@ -170,7 +170,6 @@ class FocusParams(VolumeParams):
 class FocusResult(Result):
     shape: tuple[int, int, int]
     step: int
-    focus: list[float]  # of slices 0, step, 2·step, …
     peak_z: int
     band: tuple[int, int] | None  # suggested sample slices, inclusive
     air: list[tuple[int, int]]  # slices outside the band within twice the least focus, inclusive
@@ -180,10 +179,10 @@ class FocusResult(Result):
 @op("volume.focus_by_z", cost="interactive", params=FocusParams, result=FocusResult)
 def focus_by_z(ctx: Context, p: FocusParams) -> FocusResult:
     """The focus of every `step`-th slice of volume `volume` (mean |∇|² inside
-    a 0.92-FOV disk, the align ops' score), a suggested sample band, the
-    longest run of slices at least half as sharp as the sharpest stretch, and
-    the air and the z wrap marked outside it (`z_regions`). Confirm the band
-    by eye before `group.decide`."""
+    a 0.92-FOV disk, the align ops' score) drawn as a curve, a suggested
+    sample band, the longest run of slices at least half as sharp as the
+    sharpest stretch, and the air and the z wrap marked outside it
+    (`z_regions`). Confirm the band by eye before `group.decide`."""
     d = data(p.volume)
     nz = d.shape[0]
     focus: list[float] = []
@@ -196,12 +195,11 @@ def focus_by_z(ctx: Context, p: FocusParams) -> FocusResult:
     return FocusResult(
         shape=d.shape,
         step=p.step,
-        focus=focus,
         peak_z=int(np.argmax(f)) * p.step,
         band=band,
         air=air,
         wrap=wrap,
-    )
+    ).with_arrays(focus=f)
 
 
 class FovParams(VolumeParams):
@@ -215,15 +213,15 @@ class FovResult(Result):
     center_px: float
     tilt_deg: float
     r_lateral: float  # the radius the detector width allows
-    radius: list[float]  # per slice, about the slice's middle
     full_z: tuple[int, int] | None  # the slices whose whole r_lateral disk is valid
 
 
 @op("volume.valid_fov", cost="instant", params=FovParams, result=FovResult)
 def valid_fov(ctx: Context, p: FovParams) -> FovResult:
-    """The disk of volume `volume` every projection saw, per slice: what lies
-    outside it is reconstructed from part of the turn. The scan, center and
-    tilt come from the volume's provenance unless given."""
+    """The disk of volume `volume` every projection saw: what lies outside it
+    is reconstructed from part of the turn. Its radius is at most `r_lateral`,
+    reached on the slices `full_z`. The scan, center and tilt come from the
+    volume's provenance unless given."""
     prov = provenance(p.volume)
     tag = p.tag if p.tag is not None else prov.get("tag")
     c = p.center_px if p.center_px is not None else prov.get("center_px")
@@ -244,6 +242,5 @@ def valid_fov(ctx: Context, p: FovParams) -> FovResult:
         center_px=c,
         tilt_deg=t,
         r_lateral=fov["r_lateral"],
-        radius=fov["radius"],
         full_z=fov["full_z"],
-    )
+    ).with_arrays(radius=np.array(fov["radius"]))
