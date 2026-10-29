@@ -19,6 +19,12 @@ cuda = ["tomoxide/cuda"]
 tomoxide = { path = "lib/tomoxide/crates/tomoxide" }
 pyo3 = { version = "0.27", features = ["abi3-py312"], optional = true }
 numpy = { version = "0.27", optional = true }
+rayon = "1.10"
+# Same h5/tiff crates as tomoxide, which reads what bl7c writes.
+rust-hdf5 = "0.3.2"
+tiff = "0.11"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [workspace]
 # Path dependencies under the root would join this workspace; tomoxide has its own.
