@@ -19,7 +19,8 @@ from test_align import _group
 from test_recon import _scan
 
 from lamino_pal import dispatch, jobs, launch
-from lamino_pal.mcp.server import FIGURES, build
+from lamino_pal.mcp.figures import FIGURES
+from lamino_pal.mcp.server import build
 from lamino_pal.ops import REGISTRY
 from lamino_pal.ops.registry import Params, Result
 from lamino_pal.ops.registry import build as build_op

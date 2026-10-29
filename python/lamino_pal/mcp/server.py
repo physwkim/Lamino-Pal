@@ -31,7 +31,7 @@ from mcp_types import CallToolResult, ContentBlock, ImageContent, TextContent
 from pydantic import ConfigDict, Field, ValidationError
 
 from lamino_pal import LaminoPalError, dispatch, jobs, launch
-from lamino_pal.artifacts import load_h5, written
+from lamino_pal.artifacts import load_h5
 from lamino_pal.mcp import figures
 from lamino_pal.ops import REGISTRY, load_all
 from lamino_pal.ops.registry import Op
@@ -40,7 +40,6 @@ from lamino_pal.project import Project
 WAIT_MAX_S = 45.0  # one job_wait call, under Codex's default 60 s tool timeout
 PROGRESS_EVERY_S = 0.2
 LOG_LINES = 200  # of lamino://log
-FIGURES = Path("artifacts/figures")  # under the work directory
 
 INSTRUCTIONS = """\
 Laminography reconstruction of PLS-II BL7C scans on tomoxide. Every analysis
@@ -98,17 +97,13 @@ class _Progress:
 
 
 def _figure(project: Project, name: str, op: str, result: dict[str, Any], arrays: figures.Arrays) -> list[ContentBlock]:
-    """Op `op`'s figure, saved under `FIGURES` as `name` so a decision can cite
-    what was seen; nothing for an op without one."""
+    """Op `op`'s figure, saved by `figures.save` as `name` so a decision can
+    cite what was seen; nothing for an op without one."""
     fig = figures.render(op, result, arrays)
     if fig is None:
         return []
     png, caption = fig
-    rel = FIGURES / name
-    path = project.work_dir / rel
-    if not path.exists():
-        with written(path) as part:
-            part.write_bytes(png)
+    rel = figures.save(project.work_dir, name, png)
     return [
         TextContent(type="text", text=f"{caption}\nSaved as {rel}: cite it as group_decide evidence."),
         ImageContent(type="image", data=base64.b64encode(png).decode(), mime_type="image/png"),

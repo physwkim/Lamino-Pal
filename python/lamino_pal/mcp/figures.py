@@ -1,16 +1,20 @@
 """What an op judged by eye shows the agent: its arrays as one 8-bit image,
 each panel named and windowed in the caption rather than drawn on it. A job
-op's arrays come from its artifact, the others' with the result."""
+op's arrays come from its artifact, the others' with the result. The GUI
+saves the evidence its decisions cite here too."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
 
+from lamino_pal.artifacts import written
 from lamino_pal.render import grid, montage, png, to_u8, window
 
 Arrays = dict[str, np.ndarray]
+FIGURES = Path("artifacts/figures")  # under the work directory
 _FIGURES: dict[str, Callable[[dict[str, Any], Arrays], tuple[np.ndarray, str]]] = {}
 
 
@@ -33,6 +37,17 @@ def render(op: str, result: dict[str, Any], arrays: Arrays) -> tuple[bytes, str]
         return None
     img, caption = f(result, arrays)
     return png(img), caption
+
+
+def save(work_dir: Path, name: str, image: bytes) -> Path:
+    """PNG `image` as `FIGURES`/`name` under `work_dir`, kept when it exists,
+    so a decision can cite what was seen; the path relative to `work_dir`."""
+    rel = FIGURES / name
+    path = work_dir / rel
+    if not path.exists():
+        with written(path) as part:
+            part.write_bytes(image)
+    return rel
 
 
 def _w(w: tuple[float, float]) -> str:
