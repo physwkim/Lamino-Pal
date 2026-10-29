@@ -99,12 +99,20 @@ def test_an_existing_or_queued_output_is_refused_at_submit(project):
     assert st.status == "done"
 
 
+def test_the_eta_leaves_out_a_share_reported_at_once(project):
+    # Half the job reported before any step ran, then 4 steps of dt: after
+    # step 1, 3 steps remain.
+    dt = 0.5
+    st = jobs.submit(project, "test.steps", {"n": 4, "dt": dt, "reserved": 0.5}, "cli")
+    st = until(lambda: (s := jobs.get(project, st.id)).message == "step 1" and s)
+    assert st.eta_s >= 3 * dt
+
+
 def test_cancel_stops_the_job_and_its_process_group_only(project, sleeper):
     st = jobs.submit(project, "test.steps", {"n": 400, "child": True}, "cli")
     pid_file = project.work_dir / "artifacts/steps400.txt.child"
     child = int(until(lambda: pid_file.exists() and pid_file.read_text()))
-    until(lambda: jobs.get(project, st.id).progress > 0)
-    assert jobs.get(project, st.id).eta_s > 0
+    assert until(lambda: jobs.get(project, st.id).eta_s) > 0
     jobs.cancel(project, st.id)
     st = jobs.wait(project, st.id, 20)
     assert (st.status, st.result) == ("cancelled", None)

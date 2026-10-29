@@ -197,15 +197,22 @@ def run(d: Path) -> int:
     project = Project(st.project)
     cancel_ = _core.CancelToken()
     signal.signal(signal.SIGTERM, lambda *_: cancel_.cancel())
-    t_start = time.monotonic()
+    # (time, fraction) the rate is measured from: a phase's first report, as
+    # the share it opens with (a stack load, a reserved step) took no time
+    # in proportion.
+    since: tuple[float, float] | None = None
 
     def progress(frac: float, msg: str) -> None:
-        nonlocal t_start
+        nonlocal since
         now = time.monotonic()
         # Each restart from 0 (after a GPU wait, a stack load) restarts the ETA.
         if frac <= 0:
-            t_start = now
-        eta = (now - t_start) * (1 - frac) / frac if frac > 0 else None
+            since = None
+        elif since is None:
+            since = (now, frac)
+        eta = None
+        if since is not None and frac > since[1]:
+            eta = (now - since[0]) * (1 - frac) / (frac - since[1])
         _update(d, progress=frac, message=msg, eta_s=eta)
 
     end: dict[str, Any] = {}
