@@ -88,23 +88,8 @@ def _run(
     job: bool,
     cancelled: Callable[[], bool] = lambda: False,
 ) -> Result:
-    t0 = time.monotonic()
-    entry: dict[str, Any] = {
-        "ts": datetime.now().astimezone().isoformat(timespec="milliseconds"),
-        "op": name,
-        "caller": caller,
-        "revision": project.revision,
-        "tomoxide": _core.tomoxide_rev(),
-    }
-    _open[id(entry)] = (log_path(project), entry, t0)
-    try:
-        op = REGISTRY.get(name)
-        if op is None:
-            raise LaminoPalError(f"unknown op {name}")
-        if (op.cost == "job") != job:
-            raise LaminoPalError(
-                f"{name} is a job op; submit it through jobs" if not job else f"{name} is not a job op"
-            )
+    with logged(name, params, project, caller, cancelled) as entry:
+        op = lookup(name, job)
         p = validate(op, params, project)
         entry["params"] = p.model_dump(mode="json")
         ctx = Context(project, caller, progress or (lambda frac, msg: None))
@@ -129,6 +114,40 @@ def _run(
             raise TypeError(f"{name} returned {type(r).__name__}, not {op.result.__name__}")
         entry.update(status="ok", result=r.model_dump(mode="json"))
         return r
+
+
+def lookup(name: str, job: bool) -> Op:
+    """Op `name`, refused unless it is a job op exactly when `job`."""
+    op = REGISTRY.get(name)
+    if op is None:
+        raise LaminoPalError(f"unknown op {name}")
+    if (op.cost == "job") != job:
+        raise LaminoPalError(f"{name} is a job op; submit it through jobs" if not job else f"{name} is not a job op")
+    return op
+
+
+@contextmanager
+def logged(
+    name: str,
+    params: dict[str, Any] | Params,
+    project: Project,
+    caller: Caller,
+    cancelled: Callable[[], bool] = lambda: False,
+) -> Iterator[dict[str, Any]]:
+    """The log entry of one call of op `name`, written however the call ends:
+    the caller records its checked params and its success, an exception its
+    failure. Once `cancelled()`, whatever is raised is raised as `Cancelled`."""
+    t0 = time.monotonic()
+    entry: dict[str, Any] = {
+        "ts": datetime.now().astimezone().isoformat(timespec="milliseconds"),
+        "op": name,
+        "caller": caller,
+        "revision": project.revision,
+        "tomoxide": _core.tomoxide_rev(),
+    }
+    _open[id(entry)] = (log_path(project), entry, t0)
+    try:
+        yield entry
     except BaseException as e:
         # SIGTERM reaches the op's children too, so whatever the op raises
         # once the cancel arrived is the cancel's doing.

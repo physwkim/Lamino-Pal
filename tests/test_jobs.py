@@ -59,8 +59,9 @@ def test_a_job_runs_detached_and_records_its_result(project):
     assert st.result["artifacts"] == [str(out)] and out.read_text() == "4"
     assert st.params["out"] == str(out)
     assert [s.id for s in jobs.list_(project)] == [st.id]
-    entry = last_log(project)
-    assert (entry["op"], entry["caller"], entry["status"]) == ("test.steps", "mcp", "ok")
+    queued, ran = [json.loads(x) for x in dispatch.log_path(project).read_text().splitlines()]
+    assert (queued["op"], queued["caller"], queued["status"], queued["job"]) == ("test.steps", "mcp", "queued", st.id)
+    assert (ran["op"], ran["caller"], ran["status"]) == ("test.steps", "mcp", "ok")
 
 
 def test_a_failing_op_fails_its_job(project):
@@ -70,23 +71,27 @@ def test_a_failing_op_fails_its_job(project):
 
 
 @pytest.mark.parametrize(
-    "name, params, err, why",
+    "name, params, err, why, status",
     [
-        ("test.nope", {}, LaminoPalError, "unknown op test.nope"),
-        ("log.tail", {}, LaminoPalError, "log.tail is not a job op"),
-        ("test.steps", {"n": "x"}, Exception, "valid integer"),
+        ("test.nope", {}, LaminoPalError, "unknown op test.nope", "error"),
+        ("log.tail", {}, LaminoPalError, "log.tail is not a job op", "error"),
+        ("test.steps", {"n": "x"}, Exception, "valid integer", "invalid"),
     ],
 )
-def test_submit_refuses_before_starting_anything(project, name, params, err, why):
+def test_submit_refuses_before_starting_anything_and_logs_why(project, name, params, err, why, status):
     with pytest.raises(err, match=why):
-        jobs.submit(project, name, params, "cli")
+        jobs.submit(project, name, params, "mcp")
     assert jobs.list_(project) == []
+    entry = last_log(project)
+    assert (entry["op"], entry["caller"], entry["status"], entry["params"]) == (name, "mcp", status, params)
+    assert why in entry["error"]
 
 
 def test_an_existing_or_queued_output_is_refused_at_submit(project):
     first = jobs.submit(project, "test.steps", {"n": 2, "dt": 1.0}, "cli")
     with pytest.raises(Refused, match=f"job {first.id} is writing .*artifacts/steps2.txt"):
         jobs.submit(project, "test.steps", {"n": 2}, "cli")
+    assert last_log(project)["status"] == "refused"
     assert jobs.wait(project, first.id, 20).status == "done"
     with pytest.raises(Refused, match="steps2.txt exists; pass overwrite"):
         jobs.submit(project, "test.steps", {"n": 2}, "cli")

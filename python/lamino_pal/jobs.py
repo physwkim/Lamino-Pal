@@ -27,7 +27,7 @@ from typing import Any, Iterator, Literal
 
 from pydantic import BaseModel
 
-from lamino_pal import LaminoPalError, Refused, dispatch
+from lamino_pal import Refused, dispatch
 from lamino_pal.dispatch import Caller
 from lamino_pal.ops.registry import REGISTRY, _Out
 from lamino_pal.project import Project
@@ -73,17 +73,14 @@ def jobs_dir(project: Project) -> Path:
 
 def submit(project: Project, name: str, params: dict[str, Any], caller: Caller) -> JobState:
     """Validate job op `name`'s params here, so a bad call is refused now and
-    not minutes later, and start its process."""
-    op = REGISTRY.get(name)
-    if op is None:
-        raise LaminoPalError(f"unknown op {name}")
-    if op.cost != "job":
-        raise LaminoPalError(f"{name} is not a job op; run it directly")
-    p = dispatch.validate(op, params, project)
-    jobs_dir(project).mkdir(parents=True, exist_ok=True)
-    # The job's state lock is held from its queued state to its pid: whoever
-    # reads an active job under that lock finds its pid.
+    not minutes later, and start its process. The submit is logged as a
+    call of `name` that ended queued."""
     with ExitStack() as held:
+        entry = held.enter_context(dispatch.logged(name, params, project, caller))
+        op = dispatch.lookup(name, job=True)
+        p = dispatch.validate(op, params, project)
+        entry["params"] = p.model_dump(mode="json")
+        jobs_dir(project).mkdir(parents=True, exist_ok=True)
         # GUI and MCP submit concurrently: the checks and the queued state go
         # down under one lock, so the next submitter counts this job.
         with open(jobs_dir(project) / "submit.lock", "a") as lock:
@@ -110,6 +107,8 @@ def submit(project: Project, name: str, params: dict[str, Any], caller: Caller) 
                 gpu=gpu,
                 created=now.isoformat(timespec="seconds"),
             )
+            # Held from the queued state to the pid: whoever reads an active
+            # job under it finds its pid.
             held.enter_context(_lock(d))
             _write(d, st)
         env = dict(os.environ)
@@ -134,6 +133,7 @@ def submit(project: Project, name: str, params: dict[str, Any], caller: Caller) 
         threading.Thread(target=proc.wait, daemon=True).start()
         st = st.model_copy(update={"pid": proc.pid, "proc_start": start})
         _write(d, st)
+        entry.update(status="queued", job=st.id)
     return st
 
 
