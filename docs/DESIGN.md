@@ -404,8 +404,9 @@ log에 `invalid`로 남는다. 고정 tool로 `project_open`, `project_info`,
   sweep 범위에 고르게 놓인 candidate 5개를 보인다(261003의 눈 비교가 4–5개였다).
   tilt_scan은 compare_tilts.py처럼 같은 비율로 줄인 xz plane을 셋째 줄에 둔다
   (261003에서 xz로도 20°가 가장 깨끗했다).
-- 이미지는 `artifacts/figures/`에도 저장되고, 캡션이 그 경로를 적어
-  `group_decide` 근거로 인용하게 한다. job op의 이미지는 `job_result`가
+- 이미지는 `artifacts/figures/`에도 저장되고, 구조화 결과의 `figure`가 그
+  경로와 캡션을 담아 `group_decide` 근거로 인용하게 한다(클라이언트가 구조화
+  결과만 보여도 남는다). job op의 이미지는 `job_result`가
   artifact에서 그린다.
 
 **job 모델.** job op는 즉시 `{job_id, status, gpu, last_run_s}`를 돌려준다.

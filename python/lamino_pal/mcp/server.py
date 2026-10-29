@@ -98,23 +98,30 @@ class _Progress:
         anyio.from_thread.run(self.ctx.report_progress, frac, 1.0, msg)
 
 
-def _figure(project: Project, name: str, op: str, result: dict[str, Any], arrays: figures.Arrays) -> list[ContentBlock]:
+Figure = tuple[dict[str, str], bytes]  # ({path, caption}, PNG)
+
+
+def _figure(project: Project, name: str, op: str, result: dict[str, Any], arrays: figures.Arrays) -> Figure | None:
     """Op `op`'s figure, saved by `figures.save` as `name` so a decision can
-    cite what was seen; nothing for an op without one."""
+    cite what was seen; None for an op without one."""
     fig = figures.render(op, result, arrays)
     if fig is None:
-        return []
+        return None
     png, caption = fig
-    rel = figures.save(project.work_dir, name, png)
-    return [
-        TextContent(type="text", text=f"{caption}\nSaved as {rel}: cite it as group_decide evidence."),
-        ImageContent(type="image", data=base64.b64encode(png).decode(), mime_type="image/png"),
-    ]
+    return {"path": str(figures.save(project.work_dir, name, png)), "caption": caption}, png
 
 
-def _reply(result: dict[str, Any], figure: list[ContentBlock]) -> CallToolResult:
+def _reply(result: dict[str, Any], figure: Figure | None) -> CallToolResult:
+    """`result`, with its figure's path and caption as `figure`, as the
+    structured content and as its text alike: a client may show either
+    one."""
+    image: list[ContentBlock] = []
+    if figure is not None:
+        meta, png = figure
+        result = {**result, "figure": meta}
+        image.append(ImageContent(type="image", data=base64.b64encode(png).decode(), mime_type="image/png"))
     text = TextContent(type="text", text=json.dumps(result))
-    return CallToolResult(content=[text, *figure], structured_content=result)
+    return CallToolResult(content=[text, *image], structured_content=result)
 
 
 def _last_run_s(project: Project, op: str) -> float | None:
@@ -143,7 +150,7 @@ def _run(project: Project, op: Op, args: dict[str, Any], progress: _Progress) ->
     return [result, _figure(project, name, op.name, result, r.arrays)]
 
 
-def _job_figure(project: Project, st: jobs.JobState) -> list[ContentBlock]:
+def _job_figure(project: Project, st: jobs.JobState) -> Figure | None:
     _, arrays = load_h5(st.result["artifacts"][0])
     return _figure(project, f"{st.id}.png", st.op, st.result, arrays)
 
@@ -155,7 +162,7 @@ def op_tool(session: Session, op: Op) -> Tool:
         project = session.need()
         with _errors():
             if op.cost == "job":
-                return _reply(await anyio.to_thread.run_sync(_submit, project, op, args), [])
+                return _reply(await anyio.to_thread.run_sync(_submit, project, op, args), None)
             result, fig = await anyio.to_thread.run_sync(_run, project, op, args, _Progress(ctx))
             return _reply(result, fig)
 
@@ -166,7 +173,10 @@ def op_tool(session: Session, op: Op) -> Tool:
             "last successful run took). Follow it with job_wait, then job_result."
         )
     if figures.has(op.name):
-        doc += "\n\nReturns an image of the result as well, saved under artifacts/figures/."
+        doc += (
+            "\n\nReturns an image of the result as well; `figure` gives its caption and its path under the "
+            "work directory, to cite as group_decide evidence."
+        )
     return Tool(
         fn=call,
         name=op.name.replace(".", "_"),
@@ -266,13 +276,13 @@ def build(project: Project | None) -> MCPServer:
     @server.tool()
     async def job_result(job_id: str) -> CallToolResult:
         """Finished job `job_id`'s result, with the image of an op judged by
-        eye, saved under artifacts/figures/."""
+        eye: `figure` gives its caption and its path to cite."""
         project = session.need()
         with _errors():
             st = await anyio.to_thread.run_sync(jobs.get, project, job_id)
             if st.status != "done":
                 raise ToolError(f"job {job_id} is {st.status}" + (f": {st.error}" if st.error else ""))
-            fig = await anyio.to_thread.run_sync(_job_figure, project, st) if figures.has(st.op) else []
+            fig = await anyio.to_thread.run_sync(_job_figure, project, st) if figures.has(st.op) else None
             return _reply(st.result, fig)
 
     def gui(cmd: str, args: dict[str, Any]) -> Any:

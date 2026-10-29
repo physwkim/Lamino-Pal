@@ -128,14 +128,16 @@ async def test_an_op_judged_by_eye_returns_its_image_saved_to_cite(project):
     async with Client(build(project)) as c:
         r = await c.call_tool("volume_slice", {"volume": path, "z": 2})
         assert not r.is_error and r.structured_content["z"] == 2
-        caption = r.content[1].text
-        assert caption.startswith("Slice z=2 [y, x], window [")
+        # In the structured content, which a client may show alone.
+        fig = r.structured_content["figure"]
+        assert json.loads(r.content[0].text) == r.structured_content
+        assert fig["caption"].startswith("Slice z=2 [y, x], window [")
         (saved,) = (project.work_dir / FIGURES).iterdir()
-        assert f"Saved as {FIGURES / saved.name}:" in caption and saved.name.endswith("-volume.slice.png")
+        assert fig["path"] == str(FIGURES / saved.name) and saved.name.endswith("-volume.slice.png")
         im = _image(r)
         assert (im.size, im.mode) == ((30, 20), "L")
-        assert saved.read_bytes() == base64.b64decode(r.content[2].data)
-        evidence = [str(FIGURES / saved.name)]
+        assert saved.read_bytes() == base64.b64decode(r.content[1].data)
+        evidence = [fig["path"]]
         r = await c.call_tool("group_decide", {"group": "m", "field": "center_px", "value": 30.0, "evidence": evidence})
     assert not r.is_error
     (d,) = project.reload().group[0].decisions
@@ -227,11 +229,12 @@ async def test_a_job_judged_by_eye_returns_its_image_from_its_artifact(project, 
         assert r.structured_content["status"] == "done", r.structured_content
         r = await c.call_tool("job_result", {"job_id": jid})
     assert r.structured_content["z"] == [2, 10]
-    assert r.content[1].text.startswith("Maximum intensity projections of slices [2, 10)")
+    fig = r.structured_content["figure"]
+    assert fig["caption"].startswith("Maximum intensity projections of slices [2, 10)")
     # z [y, x] beside x turned to [y, z], above y [z, x].
     gap = 4
     assert _image(r).size == (20 + gap + 8, 16 + gap + 8)
-    assert (project.work_dir / FIGURES / f"{jid}.png").exists()
+    assert fig["path"] == str(FIGURES / f"{jid}.png") and (project.work_dir / fig["path"]).exists()
 
 
 def test_slices_compared_by_eye_show_their_detail_zoomed_at_full_resolution():
@@ -371,7 +374,8 @@ async def test_the_stdio_server_aligns_previews_and_cancels_a_run_on_step1000(tm
         assert r.structured_content["trustworthy"] is False and _image(r).mode == "L"
         r = await c.call_tool("align_center_sweep", {"tag": "step1000"})
         assert r.structured_content["verdict"]["kind"] == "ambiguous"
-        assert "(best, focus" in r.content[1].text and "(rival, focus" in r.content[1].text
+        caption = r.structured_content["figure"]["caption"]
+        assert "(best, focus" in caption and "(rival, focus" in caption
         args = {"tag": "step1000", "center_px": 1008.5, "tilt_deg": 20.0, "recipe": {"algorithm": "fourierrec"}}
         r = await c.call_tool("recon_preview", args)
         assert r.structured_content["at"] == [545, 512, 512] and _image(r).mode == "L"
