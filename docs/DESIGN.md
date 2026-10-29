@@ -428,7 +428,6 @@ micromamba create -f env.yaml        # python 3.12, numpy 1.26.4, h5py, silx 2.1
                                      # tifffile, pillow, maturin, mcp, pydantic
 git submodule update --init
 maturin develop --release           # pyproject의 features: extension-module, cuda
-cargo build --release --features cuda --manifest-path lib/tomoxide/Cargo.toml -p tomoxide-cli
 ```
 
 CLI와 MCP 서버는 Qt 없이 돈다. GUI 의존성(pyside6, silx, napari, dask,
@@ -436,7 +435,9 @@ pyopengl)은 extra `gui`이고(`pip install '.[gui]'`), 실행은
 `lamino-pal-gui [--project PATH]` 또는 `python -m lamino_pal.gui`이다.
 
 core와 CLI가 같은 submodule 커밋에서 빌드되므로, preview(프로세스 안)와
-batch(CLI)의 geometry가 같은 코드다. job마다 `tomoxide --version`을 로그에
+batch(CLI)의 geometry가 같은 코드다. CLI는 `recon.run`이 그 커밋에서 처음 쓸 때
+cargo로 빌드해 `$XDG_CACHE_HOME/lamino-pal/<커밋>/tomoxide`(기본 `~/.cache`)에
+복사해 두고, 이후 job은 어느 CARGO_TARGET_DIR에서든 그 사본을 쓴다. job마다 `tomoxide --version`을 로그에
 남긴다.
 
 ## 9. 시험

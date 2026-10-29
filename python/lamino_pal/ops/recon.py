@@ -8,7 +8,9 @@ sets the scan, its geometry and the output itself.
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -376,11 +378,19 @@ def _final_out(p: RunParams, project: Project) -> dict[str, str]:
 
 # python/lamino_pal/__init__.py -> the source tree with the tomoxide submodule.
 SOURCE = Path(lamino_pal.__file__).resolve().parents[2]
+# The CLI by tomoxide commit: a job runs this copy, which no cargo build in
+# whatever CARGO_TARGET_DIR it inherits can replace or leave cold.
+CLI_CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "lamino-pal"
 
 
 def tomoxide_cli() -> Path:
-    """The tomoxide CLI, built by cargo from the submodule the core was built
-    from: `tomoxide --version` names no commit, so the build is the check."""
+    """The tomoxide CLI of the core's own tomoxide commit, built by cargo from
+    the submodule once and kept in `CLI_CACHE`: `tomoxide --version` names no
+    commit, so the build is the check."""
+    exe = CLI_CACHE / _core.tomoxide_rev() / "tomoxide"
+    if exe.is_file():
+        # Only a build that passed the checks below is kept.
+        return exe
     tox = SOURCE / "lib" / "tomoxide"
     if not (tox / "Cargo.toml").is_file():
         raise Refused(f"recon.run builds the tomoxide CLI from {tox}, which is missing")
@@ -394,6 +404,17 @@ def tomoxide_cli() -> Path:
         raise Refused(f"{tox} has uncommitted changes ({rev}): the CLI and the core cannot be shown to match")
     if rev != _core.tomoxide_rev():
         raise Refused(f"the core was built from tomoxide {_core.tomoxide_rev()}, {tox} is at {rev}: rebuild the core")
+    exe.parent.mkdir(parents=True, exist_ok=True)
+    # Jobs that start together build it once.
+    with open(exe.parent / ".build.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not exe.is_file():
+            with written(exe) as part:
+                shutil.copy2(_cargo_build(tox), part)
+    return exe
+
+
+def _cargo_build(tox: Path) -> Path:
     cargo = shutil.which("cargo") or str(Path.home() / ".cargo" / "bin" / "cargo")
     argv = [cargo, "build", "--release", "--features", "cuda", "-p", "tomoxide-cli"]
     argv += ["--manifest-path", str(tox / "Cargo.toml"), "--message-format=json-render-diagnostics"]

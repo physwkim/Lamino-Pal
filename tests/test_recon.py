@@ -1,4 +1,6 @@
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -217,8 +219,9 @@ def test_a_failed_run_says_why_and_leaves_nothing(project, run_job, tmp_path, mo
     assert [p.name for p in project.work_dir.iterdir() if "final_s" in p.name] == []
 
 
-def test_the_cli_is_built_only_from_the_cores_own_commit(tmp_path, monkeypatch):
+def test_the_cli_is_built_only_from_the_cores_own_commit_and_kept(tmp_path, monkeypatch):
     monkeypatch.setattr(recon, "SOURCE", tmp_path)
+    monkeypatch.setattr(recon, "CLI_CACHE", tmp_path / "cache")
     with pytest.raises(Refused, match="which is missing"):
         recon.tomoxide_cli()
     tox = tmp_path / "lib" / "tomoxide"
@@ -237,6 +240,24 @@ def test_the_cli_is_built_only_from_the_cores_own_commit(tmp_path, monkeypatch):
     (tox / "Cargo.toml").write_text("[workspace]\n# edit\n")
     with pytest.raises(Refused, match=f"uncommitted changes \\({rev}-dirty\\)"):
         recon.tomoxide_cli()
+    git("checkout", "-q", "Cargo.toml")
+    monkeypatch.setattr(recon._core, "tomoxide_rev", lambda: rev)
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    built = tmp_path / "built"
+    built.write_text("#!/bin/sh\n")
+    built.chmod(0o755)
+    msg = {"reason": "compiler-artifact", "target": {"name": "tomoxide"}, "executable": str(built)}
+    (bin_ / "cargo").write_text(f"#!/bin/sh\necho '{json.dumps(msg)}'\n")
+    (bin_ / "cargo").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_}:{os.environ['PATH']}")
+    exe = recon.tomoxide_cli()
+    assert exe == tmp_path / "cache" / rev / "tomoxide" and os.access(exe, os.X_OK)
+    assert sorted(p.name for p in exe.parent.iterdir()) == [".build.lock", "tomoxide"]
+    # Kept: neither the source nor cargo is needed again.
+    shutil.rmtree(bin_)
+    shutil.rmtree(tox)
+    assert recon.tomoxide_cli() == exe
 
 
 # 261003 step1000 at bin 2, center 504 (full 1008.5), tilt 20: the volumes
