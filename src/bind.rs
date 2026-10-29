@@ -123,11 +123,12 @@ fn config(recipe: &str) -> PyResult<Config> {
     Ok(c)
 }
 
-/// Refuse `recipe` (JSON of tomoxide `Config` fields) as a reconstruction
-/// would: an unknown field, an algorithm chain, a bad name or value.
+/// Every tomoxide `Config` field as `recipe` (JSON of some of them) sets it,
+/// as JSON; refused as a reconstruction would refuse it: an unknown field, an
+/// algorithm chain, a bad name or value.
 #[pyfunction]
-fn check_recipe(recipe: &str) -> PyResult<()> {
-    config(recipe).map(|_| ())
+fn recipe_config(recipe: &str) -> PyResult<String> {
+    Ok(serde_json::to_string(&config(recipe)?).expect("plain data"))
 }
 
 /// Output rows of a laminography reconstruction of `height` detector rows at
@@ -415,7 +416,7 @@ pub(crate) fn add(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(register_shift, m)?)?;
     m.add_function(wrap_pyfunction!(grid, m)?)?;
     m.add_function(wrap_pyfunction!(judge_sweep, m)?)?;
-    m.add_function(wrap_pyfunction!(check_recipe, m)?)?;
+    m.add_function(wrap_pyfunction!(recipe_config, m)?)?;
     m.add_function(wrap_pyfunction!(lamino_depth, m)?)?;
     m.add_function(wrap_pyfunction!(valid_fov, m)?)?;
     m.add_function(wrap_pyfunction!(focus_by_z, m)?)?;

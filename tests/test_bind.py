@@ -57,8 +57,9 @@ def test_grid_and_judge_sweep():
         _core.judge_sweep(c, [1.0, 2.0])
 
 
-def test_check_recipe_refuses_what_a_reconstruction_would():
-    _core.check_recipe(json.dumps({"algorithm": "fourierrec", "filter_name": "parzen"}))
+def test_recipe_config_refuses_what_a_reconstruction_would():
+    c = json.loads(_core.recipe_config(json.dumps({"algorithm": "fourierrec"})))
+    assert (c["algorithm"], c["filter_name"], c["dtype"]) == ("fourierrec", "parzen", "float32")
     for recipe, why in [
         ({"filter": "shepp"}, "has no field filter"),
         ({"algorithm": "fbp,sirt"}, "is a chain"),
@@ -67,7 +68,7 @@ def test_check_recipe_refuses_what_a_reconstruction_would():
         ([], "not a table"),
     ]:
         with pytest.raises(Refused, match=why):
-            _core.check_recipe(json.dumps(recipe))
+            _core.recipe_config(json.dumps(recipe))
 
 
 def test_valid_fov_spans_the_reconstruction_depth():
