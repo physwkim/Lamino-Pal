@@ -4,6 +4,10 @@
 pub const TOMOXIDE_REV: &str = env!("TOMOXIDE_REV");
 
 pub mod bl7c;
+pub mod prep;
+
+#[cfg(feature = "python")]
+mod bind;
 
 #[cfg(feature = "python")]
 mod python {
@@ -94,6 +98,6 @@ mod python {
         m.add_function(wrap_pyfunction!(cuda_enabled, m)?)?;
         m.add_function(wrap_pyfunction!(bl7c_discover, m)?)?;
         m.add_function(wrap_pyfunction!(bl7c_import, m)?)?;
-        Ok(())
+        crate::bind::add(m)
     }
 }
