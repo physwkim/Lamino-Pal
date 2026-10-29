@@ -467,6 +467,7 @@ def run(ctx: Context, p: RunParams) -> RunResult:
             argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
         )
         try:
+            ctx.progress(0.05, "reconstructing")
             for line in proc.stdout:
                 # The job's out.log keeps the CLI's own account.
                 sys.stdout.write(line)

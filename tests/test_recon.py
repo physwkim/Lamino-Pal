@@ -201,6 +201,7 @@ def test_run_writes_the_volume_with_its_provenance_and_leaves_nothing_else(
     out = Path(r.artifacts[0])
     assert out.name == "final_s_bin2_c64p5_t20_fourierrec_parzen.h5"
     assert (r.shape, r.secs) == ((8, 4, 4), 4.0)
+    assert seen[:3] == [(0.0, "building the tomoxide CLI"), (0.0, "waiting for GPU 0"), (0.05, "reconstructing")]
     assert (0.05 + 0.95 * 4 / 8, "row 4/8") in seen and (1.0, "row 8/8") in seen
     with h5py.File(out) as f:
         prov = dict(f["lamino_pal/provenance"].attrs)

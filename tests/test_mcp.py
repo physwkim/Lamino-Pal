@@ -21,7 +21,7 @@ from test_recon import _scan
 from lamino_pal import dispatch, jobs, launch
 from lamino_pal.mcp.figures import FIGURES
 from lamino_pal.mcp.server import build
-from lamino_pal.ops import REGISTRY
+from lamino_pal.ops import REGISTRY, recon
 from lamino_pal.ops.registry import Params, Result
 from lamino_pal.ops.registry import build as build_op
 from lamino_pal.project import Project
@@ -247,6 +247,8 @@ async def test_the_stdio_server_aligns_previews_and_cancels_a_run_on_step1000(tm
     p = Project.create(tmp_path / "e2e" / "project.toml", str(DATA))
     dispatch.run("scan.adopt", {"tag": "step1000", "h5": str(DATA / "tomoxide/step1000_bin2.h5"), "bin": 2,
                                 "kind": "step"}, project=p, caller="cli")
+    # Built here, so the run's cancel below stops the reconstruction, not cargo.
+    recon.tomoxide_cli()
     server = StdioServerParameters(
         command=sys.executable, args=["-m", "lamino_pal.mcp", "--project", str(p.path)], env=_env()
     )
@@ -262,9 +264,10 @@ async def test_the_stdio_server_aligns_previews_and_cancels_a_run_on_step1000(tm
         r = await c.call_tool("recon_run", args)
         jid = r.structured_content["job_id"]
         st = r.structured_content
-        while st["status"] == "queued":
+        while st["status"] == "queued" or st["status"] == "running" and st["message"] != "reconstructing":
             st = (await c.call_tool("job_wait", {"job_id": jid, "timeout_s": 0.5})).structured_content
-        assert st["status"] == "running", st
+        assert (st["status"], st["message"]) == ("running", "reconstructing"), st
         await c.call_tool("job_cancel", {"job_id": jid})
         st = (await c.call_tool("job_wait", {"job_id": jid, "timeout_s": 45})).structured_content
-    assert st["status"] == "cancelled", st
+    # Ended by the CLI's death, not by the grace kill ("stopped inside a call").
+    assert (st["status"], st["message"]) == ("cancelled", "reconstructing"), st
