@@ -244,6 +244,7 @@ class MainWindow(qt.QMainWindow):
                 "field": d.field,
                 "value": d.value if isinstance(d.value, float) else d.value.model_dump(),
                 "evidence": d.evidence,
+                "method": d.method,
                 "note": d.note,
             }
             self.runner.run("group.decide", params, lambda r: None, channel=f"confirm-{d.field}")

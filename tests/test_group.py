@@ -16,13 +16,13 @@ def test_decide_sets_the_field_and_records_who_and_why(project):
     r = run(project, "group.decide", group="m", field="center_px", value=1008.5, evidence=[str(ev)])
     assert (r.previous, r.by) == (None, "user")
     r = run(project, "group.decide", "mcp", group="m", field="center_px", value=1009.0,
-            evidence=["artifacts/sweep.png"], note="rival 976 blurred")
+            evidence=["artifacts/sweep.png"], method="sweep", note="rival 976 blurred")
     assert (r.previous, r.by) == (1008.5, "agent")
     g = project.reload().group[0]
     assert g.center_px == 1009.0
-    assert [(d.value, d.by, d.evidence, d.note) for d in g.decisions] == [
-        (1008.5, "user", ["artifacts/sweep.png"], ""),
-        (1009.0, "agent", ["artifacts/sweep.png"], "rival 976 blurred"),
+    assert [(d.value, d.by, d.evidence, d.method, d.note) for d in g.decisions] == [
+        (1008.5, "user", ["artifacts/sweep.png"], None, ""),
+        (1009.0, "agent", ["artifacts/sweep.png"], "sweep", "rival 976 blurred"),
     ]
     band = {"z": [420, 600], "bin": 2, "tilt_deg": 20.0}
     run(project, "group.decide", group="m", field="z_band", value=band, evidence=["artifacts/sweep.png"])

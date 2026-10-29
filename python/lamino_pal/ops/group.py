@@ -9,7 +9,7 @@ from pydantic import Field
 from lamino_pal import Refused
 from lamino_pal.dispatch import Context
 from lamino_pal.ops.registry import Params, Result, op
-from lamino_pal.project import Decision, ProjectFile, ZBand, is_under
+from lamino_pal.project import Decision, Method, ProjectFile, ZBand, is_under
 
 
 class DecideParams(Params):
@@ -17,6 +17,7 @@ class DecideParams(Params):
     field: Literal["center_px", "tilt_deg", "z_band"]
     value: float | ZBand  # center_px full resolution; z_band rows of a bin-`bin` volume
     evidence: list[str] = Field(min_length=1)  # files under the work directory
+    method: Method | None = None
     note: str = ""
 
 
@@ -29,8 +30,9 @@ class DecideResult(Result):
 def decide(ctx: Context, p: DecideParams) -> DecideResult:
     """Set mount group `group`'s center_px, tilt_deg or z_band and record the
     decision with its evidence: the images or artifacts it was read from, under
-    the work directory. A decision made over MCP is recorded as the agent's,
-    for a person to confirm."""
+    the work directory, and how it was read: `method` rings, sweep, eye or
+    focus. A decision made over MCP is recorded as the agent's, for a person
+    to confirm."""
     if (p.field == "z_band") != isinstance(p.value, ZBand):
         raise Refused(f"{p.field} takes {'a z band' if p.field == 'z_band' else 'a number'}")
     wd = ctx.project.work_dir
@@ -50,7 +52,7 @@ def decide(ctx: Context, p: DecideParams) -> DecideResult:
             raise Refused(f"no group {p.group}")
         previous = getattr(g, p.field)
         setattr(g, p.field, p.value)
-        g.decisions.append(Decision(field=p.field, value=p.value, by=by, evidence=evidence, note=p.note))
+        g.decisions.append(Decision(field=p.field, value=p.value, by=by, evidence=evidence, method=p.method, note=p.note))
 
     ctx.project.commit(mutate)
     return DecideResult(previous=previous, by=by)

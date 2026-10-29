@@ -11,6 +11,7 @@ from lamino_pal.gui.actions import figure_name, job_figure, save_figure
 from lamino_pal.gui.viewer import Viewer
 from lamino_pal.jobs import JobState
 from lamino_pal.ops.registry import Result
+from lamino_pal.project import Method
 
 GOOD, WARN, BAD = "#070", "#b60", "#b00"
 
@@ -119,7 +120,7 @@ class Tab(qt.QWidget):
         fig = job_figure(self.project, st)
         return None if fig is None else str(fig[0])
 
-    def decide(self, field: str, value: Any, evidence: list[str | None], note: str) -> None:
+    def decide(self, field: str, value: Any, evidence: list[str | None], method: Method) -> None:
         """Decide `field` of the current group as the user."""
         group = self.need("group")
         evidence = [e for e in evidence if e]
@@ -128,8 +129,8 @@ class Tab(qt.QWidget):
         if not evidence:
             self.say(f"{field}: no figure to cite; run the op that shows it first")
             return
-        params = {"group": group, "field": field, "value": value, "evidence": evidence, "note": note}
-        self.run("group.decide", params, lambda r: self.say(f"{group}: {field} decided ({note})", 10))
+        params = {"group": group, "field": field, "value": value, "evidence": evidence, "method": method}
+        self.run("group.decide", params, lambda r: self.say(f"{group}: {field} decided ({method})", 10))
 
     def on_context(self) -> None:
         """The group, scan or volume in view changed."""

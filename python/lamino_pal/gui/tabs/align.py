@@ -260,9 +260,9 @@ class AlignTab(Tab):
             if c is None:
                 return
             r = self._sweep
-            note = "sweep" if r.verdict.kind == "resolved" and c == r.verdict.center_px else "eye"
+            method = "sweep" if r.verdict.kind == "resolved" and c == r.verdict.center_px else "eye"
             evidence = [self.figure("align.center_sweep", r), self._candidate(c)]
-            self.decide("center_px", c, evidence, note)
+            self.decide("center_px", c, evidence, method)
         elif self.mode == "centers" and self._job is not None:
             c = self._picked("center_px")
             if c is not None:

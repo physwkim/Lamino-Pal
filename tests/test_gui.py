@@ -118,7 +118,7 @@ def test_status_names_how_each_field_was_decided_and_the_next_tab(scene):
     assert status.status(scene, None).next_tab == "Data"
     assert status.source(g, "center_px") == "file" and status.status(scene, g).next_tab == "Batch"
     (scene.work_dir / "fig.png").write_bytes(b"")
-    decide = {"group": "m", "field": "tilt_deg", "value": 21.0, "evidence": ["fig.png"], "note": "eye"}
+    decide = {"group": "m", "field": "tilt_deg", "value": 21.0, "evidence": ["fig.png"], "method": "eye"}
     dispatch.run("group.decide", decide, project=scene, caller="mcp")
     g = scene.data.group[0]
     assert status.source(g, "tilt_deg") == "agent" and [d.field for d in status.unconfirmed(g)] == ["tilt_deg"]
@@ -185,7 +185,7 @@ def test_the_export_slices_follow_the_band_and_keep_a_hand_edit(app, win):
     assert (ex.z0.value(), ex.z1.value()) == (0, nz)
     (win.project.work_dir / "fig.png").write_bytes(b"")
     band = {"z": [2, 20], "bin": 2, "tilt_deg": 20.0}
-    decide = {"group": "m", "field": "z_band", "value": band, "evidence": ["fig.png"], "note": "focus"}
+    decide = {"group": "m", "field": "z_band", "value": band, "evidence": ["fig.png"], "method": "focus"}
     dispatch.run("group.decide", decide, project=win.project, caller="cli")
     # The window hears project.toml change on its own.
     assert pump(app, 10, lambda: (ex.z0.value(), ex.z1.value()) == (2, 21))

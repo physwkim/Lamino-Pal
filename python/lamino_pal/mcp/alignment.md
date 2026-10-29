@@ -11,6 +11,7 @@ transfers, the values do not.
 Every decision goes through `group_decide` with evidence: a file under the
 work directory the decision was read from. Each image a tool returns is also
 saved under `artifacts/figures/`, and its caption names the file; cite that.
+Pass `method` for how the value was read: rings, sweep, eye or focus.
 Decisions made here are recorded as the agent's, for a person to confirm.
 
 ## 0. The scan

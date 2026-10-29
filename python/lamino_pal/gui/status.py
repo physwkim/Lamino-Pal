@@ -12,8 +12,6 @@ from lamino_pal.ops.registry import REGISTRY
 from lamino_pal.project import Decision, Group, Project
 
 FIELDS = ("center_px", "tilt_deg", "z_band")
-# A decision's note starting with one of these names how it was read.
-METHODS = ("rings", "sweep", "eye", "focus")
 
 
 def latest(group: Group, field: str) -> Decision | None:
@@ -22,8 +20,8 @@ def latest(group: Group, field: str) -> Decision | None:
 
 def source(group: Group, field: str) -> str | None:
     """How `field` was decided: None while it is not, "file" when no decision
-    records its value, "agent" for an agent's still to be confirmed, else the
-    method the note names or "user"."""
+    records its value, "agent" for an agent's still to be confirmed, else its
+    method or "user"."""
     value = getattr(group, field)
     if value is None:
         return None
@@ -32,8 +30,7 @@ def source(group: Group, field: str) -> str | None:
         return "file"
     if d.by == "agent":
         return "agent"
-    word = d.note.split()[0] if d.note.split() else ""
-    return word if word in METHODS else "user"
+    return d.method or "user"
 
 
 def unconfirmed(group: Group) -> list[Decision]:

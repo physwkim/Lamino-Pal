@@ -45,11 +45,16 @@ class ZBand(_Model):
     tilt_deg: float
 
 
+# How a value was read off its evidence.
+Method = Literal["rings", "sweep", "eye", "focus"]
+
+
 class Decision(_Model):
     field: Literal["center_px", "tilt_deg", "z_band"]
     value: float | ZBand
     by: Literal["user", "agent"]
     evidence: list[str] = Field(min_length=1)
+    method: Method | None = None
     note: str = ""
 
 

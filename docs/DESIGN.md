@@ -166,7 +166,7 @@ name = "mountA"                 # step1000, step800, f180 *
 center_px = 1008.5              # full-res
 tilt_deg = 20.0
 z_band = { z = [390, 1089], bin = 2, tilt_deg = 20.0 }   # tomoxide SampleBand + bin
-decisions = [ { field = "center_px", value = 1008.5, by = "user", evidence = ["artifacts/…png"], note = "…" } ]
+decisions = [ { field = "center_px", value = 1008.5, by = "user", evidence = ["artifacts/…png"], method = "rings", note = "…" } ]
 
 [[scan]]
 tag = "step1000"
@@ -190,8 +190,9 @@ dtype = "float32"
 
 쓰기는 `Project.commit(mutation)` 하나다: flock → 다시 읽기 → 적용 → revision
 증가 → atomic rename. GUI는 `QFileSystemWatcher`로 다시 읽으므로 MCP 쪽 결정이
-즉시 보인다. `group.decide`에는 evidence artifact가 필수이고, `by = "agent"`
-결정은 GUI에서 따로 표시되어 사람 확인을 받는다.
+즉시 보인다. `group.decide`에는 evidence artifact가 필수이고, 값을 읽은 방법은
+`method`(rings/sweep/eye/focus)에 따로 적는다(note는 사람이 읽는 글이다).
+`by = "agent"` 결정은 GUI에서 따로 표시되어 사람 확인을 받는다.
 
 **job.** job은 detached 프로세스다. GUI를 닫아도 batch는 계속 돌고, GUI와
 MCP가 같은 job을 본다. 상태는 `work_dir/jobs/<id>/state.json`(pid = pgid, pid
