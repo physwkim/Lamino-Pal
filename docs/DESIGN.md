@@ -51,7 +51,8 @@ tomoxide `docs/LAMINOGRAPHY_ALIGNMENT.md`.
 | even/odd projection split | `recon.split` | job | tomoxide |
 | `recon`, `fly/run_finals.sh` | `recon.run` | job | `tomoxide` CLI subprocess |
 | `inspect_volume.py` focus-by-z | `volume.focus_by_z` | interactive | tomoxide `focus_by_z` |
-| slice/ortho 보기 | `volume.slice`, `volume.ortho` | instant | h5py lazy |
+| slice 보기 | `volume.slice` | instant | h5py lazy |
+| ortho 보기 | `volume.ortho` | interactive | yz 평면은 볼륨의 모든 행을 읽음 |
 | valid FOV | `volume.valid_fov` | instant | tomoxide `Geometry::valid_fov` |
 | `export_tiff.py` | `export.tiff16` | job | core |
 | `export_bin.py` | `export.bin` | job | core |
