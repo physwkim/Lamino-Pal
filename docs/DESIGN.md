@@ -304,8 +304,9 @@ tilt ✓, z-band ✓, 재구성 n/m. 상태는 project에서 계산하고 따로
      selected center"를 눌러서 한다(고르기만으로는 정하지 않는다). Railed면
      "범위 넓히기" 버튼을 낸다. 그 결과 slice가 비어 있으면(flat) z-band 경고를
      띄운다.
-   - **Tilt.** tilt 목록으로 job을 돌린다. tilt마다 best-focus slice를 grid로
-     놓는다(`align.tilt_scan` 결과에 xz가 없어서 xz ortho는 없다). focus curve는
+   - **Tilt.** tilt 목록으로 job을 돌린다. tilt마다 best-focus slice를 grid 윗줄에,
+     그 tilt의 xz plane(가운데 row, 전체 depth)을 아랫줄에 놓는다. tomoxide
+     `lamino_tilt_scan`이 streaming 중에 xz를 모아 `TiltViews`로 넘긴다. focus curve는
      "참고용: tilt에 따라 단조 증가하므로 판단 근거 아님"으로 표시하고, 결정은
      layer를 고르고 "Decide selected tilt"를 눌러 eye로 한다.
      ALIGNMENT §6의 실패 방법은 메뉴에 두지 않는다.
@@ -378,6 +379,8 @@ log에 `invalid`로 남는다. 고정 tool로 `project_open`, `project_info`,
   확대 위치는 0.92-FOV 원 안에서 slice들의 기울기 에너지를 s/4로 매끄럽게 한
   값이 가장 큰 곳이며, 캡션이 그 좌표를 적는다. center_sweep은 best, rival과
   sweep 범위에 고르게 놓인 candidate 5개를 보인다(261003의 눈 비교가 4–5개였다).
+  tilt_scan은 compare_tilts.py처럼 같은 비율로 줄인 xz plane을 셋째 줄에 둔다
+  (261003에서 xz로도 20°가 가장 깨끗했다).
 - 이미지는 `artifacts/figures/`에도 저장되고, 캡션이 그 경로를 적어
   `group_decide` 근거로 인용하게 한다. job op의 이미지는 `job_result`가
   artifact에서 그린다.

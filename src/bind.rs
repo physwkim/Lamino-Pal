@@ -374,8 +374,9 @@ impl Stack {
     /// Reconstruct fully at each tilt of `tilts` and score each by its best
     /// slice; JSON list of `{tilt_deg, focus, z_peak, band, depth,
     /// focus_by_z}`. `band` is `((z0, z1), tilt_deg)`: the sample's rows in a
-    /// reconstruction at that tilt. `on_tilt(focus_json, best_slice)` runs
-    /// after each tilt; an exception from it stops the scan and is raised here.
+    /// reconstruction at that tilt. `on_tilt(focus_json, best_slice, xz)` runs
+    /// after each tilt, `xz` [depth, x] being the plane through the middle
+    /// row; an exception from it stops the scan and is raised here.
     #[pyo3(signature = (center, tilts, band=None, on_tilt=None))]
     fn tilt_scan(
         &self,
@@ -388,10 +389,11 @@ impl Stack {
         let band = band.map(|(z, tilt_deg)| SampleBand { z, tilt_deg });
         let mut raised = None;
         let r = py.detach(|| {
-            self.0.tilt_scan(center, &tilts, band, &mut |f, best| {
+            self.0.tilt_scan(center, &tilts, band, &mut |f, views| {
                 let Some(cb) = &on_tilt else { return Ok(()) };
                 Python::attach(|py| -> PyResult<()> {
-                    cb.call1(py, (focus_json(f).to_string(), numpy(py, &best)?))?;
+                    let (slice, xz) = (numpy(py, &views.slice)?, numpy(py, &views.xz)?);
+                    cb.call1(py, (focus_json(f).to_string(), slice, xz))?;
                     Ok(())
                 })
                 .map_err(|e| {

@@ -17,10 +17,12 @@ from silx.gui import qt
 from test_recon import _scan
 
 from lamino_pal import _core, dispatch
+from lamino_pal.artifacts import save_h5
 from lamino_pal.gui import status
 from lamino_pal.gui.actions import ACTIONS, RunOpDialog
 from lamino_pal.gui.form import ParamsForm
 from lamino_pal.gui.runner import Runner
+from lamino_pal.jobs import JobState
 from lamino_pal.ops import REGISTRY
 from lamino_pal.ops.align import Rival, SweepResult, Verdict
 
@@ -161,6 +163,30 @@ def test_an_ambiguous_sweep_shows_every_candidate_to_pick_by_eye(app, win):
     ).with_arrays(frames=np.random.default_rng(0).random((4, 8, 8), dtype="f4"))
     win.tabs["Align"]._show_sweep(r)
     assert names(win.tabs["Align"].view) == ["c 63.00", "c 64.00", "c 65.00", "c 66.00"]
+
+
+def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_under_its_slice(app, win):
+    rng = np.random.default_rng(0)
+    xz = np.full((2, 9, 8), np.nan, np.float32)
+    xz[0, :7], xz[1] = rng.random((7, 8)), rng.random((9, 8))
+    tilts = [{"tilt_deg": t, "focus": 1.0, "z_peak": 2, "band": None, "depth": d} for t, d in ((19, 7), (21, 9))]
+    out = win.project.work_dir / "tilts.h5"
+    save_h5(out, {}, best=rng.random((2, 8, 8), dtype="f4"), xz=xz)
+    result = {"center_px": 64.5, "tilts": tilts, "artifacts": [str(out)]}
+    st = JobState(
+        id="j", project="", op="align.tilt_scan", params={}, caller="gui", gpu=None, status="done", created="",
+        result=result,
+    )
+    at = win.tabs["Align"]
+    at.on_job(st)
+    model = at.view.model
+    assert names(at.view) == ["tilt 19", "tilt 21", "xz 19", "xz 21"]
+    # Slices in the top row, their xz planes under them.
+    assert [model.grid.position(i, 4) for i in range(4)] == [(0, 0), (0, 1), (1, 0), (1, 1)]
+    assert [model.layers[f"xz {t}"].data.shape for t in (19, 21)] == [(7, 8), (9, 8)]
+    assert [layer.metadata["tilt_deg"] for layer in model.layers] == [19, 21, 19, 21]
+    at._show_mode("sweep")
+    assert model.grid.shape == (-1, -1)
 
 
 def test_the_volume_planes_follow_one_slider_once_and_3d_shows_the_binned_volume(app, win):

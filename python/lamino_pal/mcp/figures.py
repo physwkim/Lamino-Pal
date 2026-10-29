@@ -82,26 +82,37 @@ def _zoom_at(stack: np.ndarray, s: int) -> tuple[int, int]:
     return int(np.clip(cy - s // 2, 0, ny - s)), int(np.clip(cx - s // 2, 0, nx - s))
 
 
-def _tiles(stack: np.ndarray, labels: list[str]) -> tuple[np.ndarray, str, str]:
+def _tiles(stack: np.ndarray, labels: list[str], xz: list[np.ndarray] | None = None) -> tuple[np.ndarray, str, str]:
     """A column per slice of `stack`, as the 261003 compare scripts drew them:
     an s×s zoom at full resolution above the whole slice shrunk to s, s as
-    wide as one row of them fits `LONG_SIDE`; each panel on its own window.
-    The zoom, where `_zoom_at` finds the detail, as text too."""
+    wide as one row of them fits `LONG_SIDE`, and the slice's `xz` plane, if
+    given, below it shrunk alike; each panel on its own window. The zoom,
+    where `_zoom_at` finds the detail, as text too."""
     n, ny, nx = stack.shape
     s = min(ny, nx, (LONG_SIDE - GAP * (n - 1)) // n)
     y0, x0 = _zoom_at(stack, s)
     k = s / max(ny, nx)
-    zooms, wholes, lines = [], [], []
-    for a, label in zip(stack, labels):
+
+    def shrunk(a: np.ndarray) -> np.ndarray:
+        if k >= 1:
+            return a
+        h, w = a.shape
+        return np.asarray(Image.fromarray(a).resize((round(w * k), round(h * k)), Image.Resampling.LANCZOS))
+
+    rows: list[list[np.ndarray]] = [[], [], []]
+    lines = []
+    for i, (a, label) in enumerate(zip(stack, labels)):
         z, wz = _own(a[y0 : y0 + s, x0 : x0 + s])
         t, w = _own(a)
-        if k < 1:
-            t = np.asarray(Image.fromarray(t).resize((round(nx * k), round(ny * k)), Image.Resampling.LANCZOS))
-        zooms.append(z)
-        wholes.append(t)
+        rows[0].append(z)
+        rows[1].append(shrunk(t))
         lines.append(f"- {label}, zoom window {_w(wz)}, slice window {_w(w)}")
+        if xz is not None:
+            p, wp = _own(xz[i])
+            rows[2].append(shrunk(p))
+            lines[-1] += f", xz window {_w(wp)}"
     zoom = f"the zoom [{y0}:{y0 + s}, {x0}:{x0 + s}] at full resolution above the whole slice"
-    return grid([zooms, wholes]), zoom, "\n".join(lines)
+    return grid(rows if xz is not None else rows[:2]), zoom, "\n".join(lines)
 
 
 def _ortho(sl: np.ndarray, xz: np.ndarray, yz: np.ndarray, ws: list[tuple[float, float]]) -> np.ndarray:
@@ -136,8 +147,13 @@ def _sweep(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
 @_figure("align.tilt_scan")
 def _tilts(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
     labels = [f"tilt {t['tilt_deg']:g} deg, slice {t['z_peak']} (focus {t['focus']:.4g})" for t in r["tilts"]]
-    img, zoom, lines = _tiles(a["best"], labels)
-    return img, f"Each tilt's best slice at center {r['center_px']:.2f} px, left to right, {zoom}:\n{lines}"
+    xz = [p[: t["depth"]] for p, t in zip(a["xz"], r["tilts"])]
+    img, zoom, lines = _tiles(a["best"], labels, xz)
+    y = a["best"].shape[1] // 2
+    return img, (
+        f"Each tilt's best slice at center {r['center_px']:.2f} px, left to right, {zoom}, and the xz plane"
+        f" through y={y} [z, x] over the tilt's whole depth below it, shrunk alike:\n{lines}"
+    )
 
 
 @_figure("align.center_compare")

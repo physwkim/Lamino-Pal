@@ -247,9 +247,11 @@ def _tilt_scan_out(p: TiltScanParams, _: Project) -> dict[str, str]:
 )
 def tilt_scan(ctx: Context, p: TiltScanParams) -> TiltScanResult:
     """Reconstruct scan `tag` fully at each tilt and keep each one's best
-    slice, inside the group's z band carried to that tilt. Decide the tilt by
-    eye on the slices in `out`: the focus value grows with tilt on the 261003
-    sample and does not pick it. Arrays in `out`: `best` [tilt, y, x]."""
+    slice, inside the group's z band carried to that tilt, and its xz plane
+    through the middle row. Decide the tilt by eye on the slices and xz planes
+    in `out`: the focus value grows with tilt on the 261003 sample and does not
+    pick it. Arrays in `out`: `best` [tilt, y, x], `xz` [tilt, z, x], each
+    tilt's first `depth` rows and NaN below them."""
     scan, path = scans.find(ctx.project, p.tag)
     group = scans.group_of(ctx.project, scan)
     c = _decided_center(scan, group, p.center_px)
@@ -257,17 +259,22 @@ def tilt_scan(ctx: Context, p: TiltScanParams) -> TiltScanResult:
     ctx.progress(0.0, "loading the stack")
     stack = scans.stack(path)
     best: list[np.ndarray] = []
+    xz: list[np.ndarray] = []
 
-    def on_tilt(f: str, slice: np.ndarray) -> None:
+    def on_tilt(f: str, slice: np.ndarray, plane: np.ndarray) -> None:
         best.append(slice)
+        xz.append(plane)
         f = json.loads(f)
         ctx.progress(len(best) / len(p.tilts_deg), f"tilt {f['tilt_deg']:g}: z {f['z_peak']}")
 
     foci = json.loads(stack.tilt_scan(units.center_for_scan(scan, c), p.tilts_deg, band, on_tilt))
     r = TiltScanResult(center_px=c, tilts=[TiltFocus(**f) for f in foci], artifacts=[p.out])
     stacked = np.stack(best)
-    save_h5(p.out, r.model_dump(mode="json", exclude={"artifacts"}), best=stacked)
-    return r.with_arrays(best=stacked)
+    planes = np.full((len(xz), max(len(x) for x in xz), stacked.shape[2]), np.nan, np.float32)
+    for x, plane in zip(planes, xz):
+        x[: len(plane)] = plane
+    save_h5(p.out, r.model_dump(mode="json", exclude={"artifacts"}), best=stacked, xz=planes)
+    return r.with_arrays(best=stacked, xz=planes)
 
 
 class CompareParams(OutputParams):
@@ -319,7 +326,7 @@ def center_compare(ctx: Context, p: CompareParams) -> CompareResult:
     centers = []
     for c in p.centers_px:
         f = json.loads(
-            stack.tilt_scan(units.center_for_scan(scan, c), [tilt], band, lambda f, s: best.append(s))
+            stack.tilt_scan(units.center_for_scan(scan, c), [tilt], band, lambda f, s, xz: best.append(s))
         )[0]
         centers.append(
             CenterFocus(center_px=c, focus=f["focus"], z_peak=f["z_peak"], band=f["band"], focus_by_z=f["focus_by_z"])

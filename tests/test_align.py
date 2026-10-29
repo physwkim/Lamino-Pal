@@ -105,6 +105,10 @@ def test_tilt_scan_carries_the_band_to_each_tilt(mount, run_job):
     meta, arrays = load_h5(r.artifacts[0])
     assert r.artifacts[0].endswith("artifacts/step1000_tilts_cgroup_t18-22.h5")
     assert meta["center_px"] == 1008.5 and arrays["best"].shape == (3, 1024, 1024)
+    # Each tilt's xz plane over its own depth, NaN below it.
+    assert arrays["xz"].shape == (3, 1106, 1024)
+    for x, t in zip(arrays["xz"], r.tilts):
+        assert np.isfinite(x[: t.depth]).all() and np.isnan(x[t.depth :]).all()
 
 
 @pytest.mark.golden

@@ -69,9 +69,9 @@ the figure.
 ## 4. Tilt, then a small refine only
 
 - `align_tilt_scan(tag, tilts_deg)` at the decided center keeps each tilt's
-  best slice in the band carried to that tilt. Decide the tilt by eye on the
-  images: on the 261003 sample the focus value grows with tilt and does not
-  pick it.
+  best slice in the band carried to that tilt and its xz plane. Decide the
+  tilt by eye on both: on the 261003 sample the focus value grows with tilt
+  and does not pick it, and the xz planes agreed with the slices on 20°.
 - Refine (center, tilt) only on a small grid around the prior. A sweep refines
   a prior; it does not find one: widening to ±40 px grew three lobes whose
   highest was the wrong one, while ±8 px around the rings' center returned

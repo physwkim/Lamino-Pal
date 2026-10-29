@@ -115,6 +115,8 @@ class AlignTab(Tab):
         self.mode = mode
         self.view.clear()
         self.view.model.grid.enabled = mode in ("sweep", "tilts", "centers")
+        # The tilts' slices in one row, their xz planes in the row below.
+        self.view.model.grid.shape = (2, -1) if mode == "tilts" else (-1, -1)
         self.plot.clear()
         self.plot.setGraphTitle("")
         self.widen.hide()
@@ -298,11 +300,15 @@ class AlignTab(Tab):
             rows = st.result["tilts"]
             for t, a in zip(rows, best):
                 self._layer(f"tilt {t['tilt_deg']:g}", a, tilt_deg=t["tilt_deg"])
+            for t, a in zip(rows, arrays["xz"]):
+                self._layer(f"xz {t['tilt_deg']:g}", a[: t["depth"]], tilt_deg=t["tilt_deg"])
             x = [t["tilt_deg"] for t in rows]
             self.plot.addCurve(x, [t["focus"] for t in rows], legend="focus", symbol="o", color="gray")
             self.plot.setGraphTitle(TILT_FOCUS)
             self.plot.getXAxis().setLabel("tilt °")
-            self.verdict.setText(f"job {st.id}: each tilt's best slice at center {st.result['center_px']:.2f} px")
+            self.verdict.setText(
+                f"job {st.id}: each tilt's best slice at center {st.result['center_px']:.2f} px, its xz plane below"
+            )
         else:
             self._show_mode("centers")
             rows = st.result["centers"]
