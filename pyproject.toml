@@ -7,10 +7,11 @@ name = "lamino-pal"
 version = "0.1.0"
 description = "BL7C laminography reconstruction GUI and MCP server on tomoxide"
 requires-python = ">=3.12"
-dependencies = ["numpy", "h5py", "pydantic>=2", "tomli-w", "tifffile"]
+dependencies = ["numpy", "h5py", "pydantic>=2", "tomli-w", "tifffile", "mcp>=2.3,<3", "pillow", "matplotlib"]
 
 [project.scripts]
 lamino-pal = "lamino_pal.cli:main"
+lamino-pal-mcp = "lamino_pal.mcp.server:main"
 
 [tool.maturin]
 python-source = "python"

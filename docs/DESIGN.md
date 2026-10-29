@@ -325,13 +325,16 @@ tilt ✓, z-band ✓, 재구성 n/m. 상태는 project에서 계산하고 따로
 
 ## 7. MCP 서버
 
-`lamino-pal-mcp [--project PATH]`, Python `mcp` SDK(FastMCP), stdio.
+`lamino-pal-mcp [--project PATH]`, Python `mcp` SDK 2.3의 `MCPServer`, stdio.
+서버는 그 project의 interactive GPU에서 돈다. `TOMOXIDE_CUDA_DEVICES`가 비어
+있으면 그 GPU로 채워 자신을 다시 실행한다. 아직 없는 경로면 새 project의 기본
+GPU로 뜨고, `project_open`이 project를 만든다.
 
 **tool 생성.** registry를 순회하며 op마다 tool 하나를 만든다. 이름은
 `align.center_sweep` → `align_center_sweep`, 설명은 op docstring(영문), 입력
-schema는 pydantic 모델이다. 고정 tool로 `project_open`, `project_info`,
-`log_tail`, `job_list`, `job_status`, `job_wait`, `job_cancel`, `job_result`를
-더한다.
+schema는 pydantic 모델이다. 인자는 dispatcher가 검증하므로 잘못된 호출도
+log에 `invalid`로 남는다. 고정 tool로 `project_open`, `project_info`,
+`job_list`, `job_status`, `job_wait`, `job_cancel`, `job_result`를 더한다.
 
 **반환.**
 
@@ -341,10 +344,14 @@ schema는 pydantic 모델이다. 고정 tool로 `project_open`, `project_info`,
   preview, compare, split, focus_by_z, slice, ortho, mip)는 PNG를
   `ImageContent`로 같이 돌려준다. 긴 변 ≤ 1568 px, 8-bit이고, window 값과
   panel 라벨은 캡션 텍스트로 붙인다. 원본 해상도는 artifact로 남는다.
+- 이미지는 `artifacts/figures/`에도 저장되고, 캡션이 그 경로를 적어
+  `group_decide` 근거로 인용하게 한다. job op의 이미지는 `job_result`가
+  artifact에서 그린다.
 
-**job 모델.** job op는 즉시 `{job_id, est_s}`를 돌려준다.
+**job 모델.** job op는 즉시 `{job_id, status, gpu, last_run_s}`를 돌려준다.
+`last_run_s`는 같은 op가 마지막으로 성공했을 때 걸린 시간(log 기준)이다.
 `job_wait(job_id, timeout_s ≤ 45)`는 끝나거나 timeout이 될 때까지 기다린 뒤
-progress를 돌려준다. Codex 기본 `tool_timeout_sec` 60보다 짧게 잡아 어떤 tool
+job state를 돌려준다. Codex 기본 `tool_timeout_sec` 60보다 짧게 잡아 어떤 tool
 호출도 timeout에 걸리지 않게 한다. MCP progress notification도 보낸다.
 
 **resource / prompt.**
@@ -394,7 +401,7 @@ Lamino-Pal/
 ```sh
 micromamba create -f env.yaml        # python 3.12, numpy 1.26.4, h5py, silx 2.1.0,
                                      # napari 0.6.6, dask, pyside6, pyopengl, matplotlib,
-                                     # tifffile, maturin, mcp, pydantic
+                                     # tifffile, pillow, maturin, mcp, pydantic
 git submodule update --init
 maturin develop --release --features cuda
 cargo build --release --features cuda --manifest-path lib/tomoxide/Cargo.toml -p tomoxide-cli

@@ -1,0 +1,164 @@
+"""What an op judged by eye shows the agent: its arrays as one 8-bit image,
+each panel named and windowed in the caption rather than drawn on it. A job
+op's arrays come from its artifact, the others' with the result."""
+
+from __future__ import annotations
+
+from typing import Any, Callable
+
+import numpy as np
+
+from lamino_pal.render import grid, montage, png, to_u8, window
+
+Arrays = dict[str, np.ndarray]
+_FIGURES: dict[str, Callable[[dict[str, Any], Arrays], tuple[np.ndarray, str]]] = {}
+
+
+def _figure(*ops: str):
+    def register(fn):
+        _FIGURES.update(dict.fromkeys(ops, fn))
+        return fn
+
+    return register
+
+
+def has(op: str) -> bool:
+    return op in _FIGURES
+
+
+def render(op: str, result: dict[str, Any], arrays: Arrays) -> tuple[bytes, str] | None:
+    """Op `op`'s figure as PNG, with its caption; None for an op without one."""
+    f = _FIGURES.get(op)
+    if f is None:
+        return None
+    img, caption = f(result, arrays)
+    return png(img), caption
+
+
+def _w(w: tuple[float, float]) -> str:
+    return f"[{w[0]:.4g}, {w[1]:.4g}]"
+
+
+def _own(a: np.ndarray) -> tuple[np.ndarray, tuple[float, float]]:
+    w = window(a)
+    return to_u8(a, w), w
+
+
+def _tiles(stack: np.ndarray, labels: list[str]) -> tuple[np.ndarray, str]:
+    tiles, lines = [], []
+    for a, label in zip(stack, labels):
+        t, w = _own(a)
+        tiles.append(t)
+        lines.append(f"- {label}, window {_w(w)}")
+    return montage(tiles), "\n".join(lines)
+
+
+def _ortho(sl: np.ndarray, xz: np.ndarray, yz: np.ndarray, ws: list[tuple[float, float]]) -> np.ndarray:
+    """The slice top left, xz below it and yz turned to stand right of it."""
+    a, b, c = (to_u8(x, w) for x, w in zip((sl, xz, yz.T), ws))
+    return grid([[a, c], [b, None]])
+
+
+@_figure("align.rings")
+def _mean(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
+    t, w = _own(a["mean"])
+    return t, f"Mean −log projection [row, column], window {_w(w)}."
+
+
+@_figure("align.center_sweep")
+def _sweep(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
+    v, c, f = r["verdict"], r["candidates_px"], r["focus"]
+    role = {0: "first", len(c) - 1: "last", v["index"]: "best"}
+    role.update({x["index"]: "rival" for x in v["rivals"]})
+    keep = sorted(role)
+    labels = [f"center {c[i]:.2f} px ({role[i]}, focus {f[i]:.4g})" for i in keep]
+    img, lines = _tiles(a["frames"][keep], labels)
+    head = f"Slice {r['slice']} at tilt {r['tilt_deg']:g} for the best, rival and edge candidates, left to right:"
+    return img, f"{head}\n{lines}"
+
+
+@_figure("align.tilt_scan")
+def _tilts(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
+    labels = [f"tilt {t['tilt_deg']:g} deg, slice {t['z_peak']} (focus {t['focus']:.4g})" for t in r["tilts"]]
+    img, lines = _tiles(a["best"], labels)
+    return img, f"Each tilt's best slice at center {r['center_px']:.2f} px, left to right:\n{lines}"
+
+
+@_figure("align.center_compare")
+def _centers(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
+    labels = [f"center {c['center_px']:.2f} px, slice {c['z_peak']} (focus {c['focus']:.4g})" for c in r["centers"]]
+    img, lines = _tiles(a["best"], labels)
+    return img, f"Each center's best slice at tilt {r['tilt_deg']:g}, left to right:\n{lines}"
+
+
+@_figure("recon.preview", "volume.ortho")
+def _planes(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
+    z, y, x = r["at"]
+    img = _ortho(a["slice"], a["xz"], a["yz"], [tuple(r["window"])] * 3)
+    return img, (
+        f"Slice z={z} [y, x] top left, the xz plane at y={y} [z, x] below it, the yz plane at x={x} "
+        f"turned to [y, z] right of it; all on the slice's window {_w(r['window'])}."
+    )
+
+
+@_figure("volume.slice")
+def _slice(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
+    return to_u8(a["slice"], r["window"]), f"Slice z={r['z']} [y, x], window {_w(r['window'])}."
+
+
+def _columns(sl: np.ndarray, xz: np.ndarray, ws: list[tuple[float, float]]) -> np.ndarray:
+    """One column per stack entry: its slice above its xz plane, both on its window."""
+    return grid([[to_u8(s, w) for s, w in zip(sl, ws)], [to_u8(p, w) for p, w in zip(xz, ws)]])
+
+
+@_figure("recon.compare")
+def _variants(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
+    ws = [tuple(v["window"]) for v in r["variants"]]
+    labels = [v["label"] + (f", CNR {v['cnr']:.3g}" if v["cnr"] is not None else "") for v in r["variants"]]
+    z, y = r["at"]
+    lines = "\n".join(f"- {lb}, window {_w(w)}" for lb, w in zip(labels, ws))
+    head = f"Variants left to right: slice z={z} above, the xz plane at y={y} below, on its slice's window:"
+    return _columns(a["slice"], a["xz"], ws), f"{head}\n{lines}"
+
+
+@_figure("recon.split")
+def _halves(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
+    ws = [window(s) for s in a["slice"]]
+    labels = [f"{h} projections ({n})" for h, n in zip(("even", "odd"), r["nproj"])]
+    z, y = r["at"]
+    lines = "\n".join(f"- {lb}, window {_w(w)}" for lb, w in zip(labels, ws))
+    head = f"Even half left, odd right: slice z={z} above, the xz plane at y={y} below, on its slice's window:"
+    return _columns(a["slice"], a["xz"], ws), f"{head}\n{lines}"
+
+
+@_figure("export.mip")
+def _mip(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
+    ws = [window(a[k]) for k in ("z", "y", "x")]
+    z0, z1 = r["z"]
+    return _ortho(a["z"], a["y"], a["x"], ws), (
+        f"Maximum intensity projections of slices [{z0}, {z1}): down z [y, x] top left (window {_w(ws[0])}), "
+        f"along y [z, x] below it (window {_w(ws[1])}), along x turned to [y, z] right of it (window {_w(ws[2])})."
+    )
+
+
+@_figure("volume.focus_by_z")
+def _focus(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+
+    f = np.asarray(r["focus"])
+    z = np.arange(f.size) * r["step"]
+    fig = Figure(figsize=(10, 3.5), dpi=100, layout="constrained")
+    canvas = FigureCanvasAgg(fig)
+    ax = fig.add_subplot()
+    ax.plot(z, f, color="black", lw=1)
+    if r["band"] is not None:
+        ax.axvspan(*r["band"], color="0.85", lw=0)
+    ax.axvline(r["peak_z"], color="0.4", lw=1, ls="--")
+    ax.set(xlabel="slice z", ylabel="focus (mean |∇|²)", xlim=(0, r["shape"][0]))
+    canvas.draw()
+    band = "none" if r["band"] is None else f"[{r['band'][0]}, {r['band'][1]}] (shaded)"
+    return np.asarray(canvas.buffer_rgba())[..., :3].copy(), (
+        f"Focus of every {r['step']}th slice of {r['shape'][0]}; suggested band {band}, "
+        f"peak at z={r['peak_z']} (dashed)."
+    )

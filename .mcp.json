@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "lamino-pal": {
+      "command": "micromamba",
+      "args": ["run", "-n", "lamino-pal", "lamino-pal-mcp",
+               "--project", "/home/stevek/work/261003_Lamino_test/lamino_pal/project.toml"]
+    }
+  }
+}
