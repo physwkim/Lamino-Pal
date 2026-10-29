@@ -131,7 +131,7 @@ lamino_pal/
   project.py        project.toml 소유자
   units.py          center/z 단위 변환의 유일한 위치
   jobs.py           job 프로세스 생성/상태/취소
-  render.py         window(pct), montage, PNG
+  render.py         window(pct), grid, PNG
   gui/  mcp/  cli.py
 ```
 
@@ -371,6 +371,11 @@ log에 `invalid`로 남는다. 고정 tool로 `project_open`, `project_info`,
   preview, compare, split, focus_by_z, slice, ortho, mip)는 PNG를
   `ImageContent`로 같이 돌려준다. 긴 변 ≤ 1568 px, 8-bit이고, window 값과
   panel 라벨은 캡션 텍스트로 붙인다. 원본 해상도는 artifact로 남는다.
+- slice 여러 장을 눈으로 견주는 그림(center_sweep, tilt_scan, center_compare)은
+  261003의 compare 스크립트처럼 slice마다 한 열에, 원 해상도 s×s 확대를 위에,
+  s로 줄인 전체 slice를 아래에 둔다. s는 한 줄이 1568 px에 들어가는 크기이고,
+  확대 위치는 0.92-FOV 원 안에서 slice들의 기울기 에너지를 s/4로 매끄럽게 한
+  값이 가장 큰 곳이며, 캡션이 그 좌표를 적는다.
 - 이미지는 `artifacts/figures/`에도 저장되고, 캡션이 그 경로를 적어
   `group_decide` 근거로 인용하게 한다. job op의 이미지는 `job_result`가
   artifact에서 그린다.

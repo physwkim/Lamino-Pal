@@ -48,12 +48,6 @@ def grid(rows: list[list[np.ndarray | None]]) -> np.ndarray:
     return out
 
 
-def montage(tiles: list[np.ndarray]) -> np.ndarray:
-    """8-bit tiles left to right, then top to bottom, in about a square."""
-    ncol = int(np.ceil(np.sqrt(len(tiles))))
-    return grid([tiles[i : i + ncol] for i in range(0, len(tiles), ncol)])
-
-
 def png(a: np.ndarray) -> bytes:
     """8-bit image `a` as PNG, shrunk to at most `LONG_SIDE` on its longer side."""
     im = Image.fromarray(a)

@@ -2,6 +2,7 @@ import base64
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -19,7 +20,9 @@ from test_align import _group
 from test_recon import _scan
 
 from lamino_pal import dispatch, jobs, launch
+from lamino_pal.mcp import figures
 from lamino_pal.mcp.figures import FIGURES
+from lamino_pal.render import to_u8, window
 from lamino_pal.mcp.server import build
 from lamino_pal.ops import REGISTRY, recon
 from lamino_pal.ops.registry import Params, Result
@@ -189,6 +192,29 @@ async def test_a_job_judged_by_eye_returns_its_image_from_its_artifact(project, 
     gap = 4
     assert _image(r).size == (20 + gap + 8, 16 + gap + 8)
     assert (project.work_dir / FIGURES / f"{jid}.png").exists()
+
+
+def test_slices_compared_by_eye_show_their_detail_zoomed_at_full_resolution():
+    n, yc, xc = 1200, 800, 350
+    yy, xx = np.mgrid[0:n, 0:n]
+    # Detail fading out from (yc, xc) inside the 0.92-FOV disk, and noise
+    # stronger than it in the corners outside the disk.
+    detail = ((yy + xx) % 2) * np.exp(-((yy - yc) ** 2 + (xx - xc) ** 2) / (2 * 60.0**2))
+    noise = np.random.default_rng(0).normal(size=(n, n)) * (np.hypot(yy - n / 2, xx - n / 2) > 0.5 * n)
+    best = np.stack([detail + noise, 2 * detail + noise, 3 * detail]).astype(np.float32)
+    tilts = [{"tilt_deg": t, "z_peak": 5, "focus": 1.0} for t in (18, 20, 22)]
+    image, caption = figures.render("align.tilt_scan", {"center_px": 504.0, "tilts": tilts}, {"best": best})
+    gap, s = 4, (1568 - 2 * 4) // 3
+    y0, y1, x0, x1 = map(int, re.search(r"zoom \[(\d+):(\d+), (\d+):(\d+)\] at full", caption).groups())
+    assert (y1 - y0, x1 - x0) == (s, s)
+    assert abs((y0 + y1) / 2 - yc) <= 2 and abs((x0 + x1) / 2 - xc) <= 2
+    im = np.asarray(Image.open(io.BytesIO(image)))
+    # Zooms in a row above the whole slices shrunk to s, nothing scaled again.
+    assert im.shape == (2 * s + gap, 3 * s + 2 * gap)
+    for i, a in enumerate(best):
+        zoom = a[y0:y1, x0:x1]
+        assert np.array_equal(im[:s, i * (s + gap) : i * (s + gap) + s], to_u8(zoom, window(zoom)))
+    assert caption.splitlines()[1].startswith("- tilt 18 deg, slice 5 (focus 1), zoom window [")
 
 
 async def test_project_open_opens_or_creates_and_resources_follow_it(project, tmp_path):

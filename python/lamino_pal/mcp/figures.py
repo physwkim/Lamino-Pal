@@ -9,9 +9,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
+from PIL import Image
 
 from lamino_pal.artifacts import written
-from lamino_pal.render import grid, montage, png, to_u8, window
+from lamino_pal.render import GAP, LONG_SIDE, grid, png, to_u8, window
 
 Arrays = dict[str, np.ndarray]
 FIGURES = Path("artifacts/figures")  # under the work directory
@@ -59,13 +60,44 @@ def _own(a: np.ndarray) -> tuple[np.ndarray, tuple[float, float]]:
     return to_u8(a, w), w
 
 
-def _tiles(stack: np.ndarray, labels: list[str]) -> tuple[np.ndarray, str]:
-    tiles, lines = [], []
+def _zoom_at(stack: np.ndarray, s: int) -> tuple[int, int]:
+    """The top left of the s×s zoom, centred where the slices' gradient
+    energy, each slice on its own window and the sum smoothed over s/4,
+    peaks inside the 0.92-FOV disk the focus score is measured in: the ring
+    outside it holds geometry artifacts."""
+    _, ny, nx = stack.shape
+    e = np.zeros((2 * ny, 2 * nx))  # zero padded: the smoothing does not wrap
+    for a in stack:
+        gy, gx = np.gradient(to_u8(a, window(a)).astype(np.float32))
+        e[:ny, :nx] += gx * gx + gy * gy
+    yy, xx = np.mgrid[0:ny, 0:nx]
+    e[:ny, :nx][np.hypot(yy - ny / 2, xx - nx / 2) >= 0.46 * min(ny, nx)] = 0
+    f2 = np.fft.fftfreq(2 * ny)[:, None] ** 2 + np.fft.rfftfreq(2 * nx)[None, :] ** 2
+    smooth = np.fft.irfft2(np.fft.rfft2(e) * np.exp(-2 * (np.pi * s / 4) ** 2 * f2), e.shape)[:ny, :nx]
+    cy, cx = np.unravel_index(np.argmax(smooth), smooth.shape)
+    return int(np.clip(cy - s // 2, 0, ny - s)), int(np.clip(cx - s // 2, 0, nx - s))
+
+
+def _tiles(stack: np.ndarray, labels: list[str]) -> tuple[np.ndarray, str, str]:
+    """A column per slice of `stack`, as the 261003 compare scripts drew them:
+    an s×s zoom at full resolution above the whole slice shrunk to s, s as
+    wide as one row of them fits `LONG_SIDE`; each panel on its own window.
+    The zoom, where `_zoom_at` finds the detail, as text too."""
+    n, ny, nx = stack.shape
+    s = min(ny, nx, (LONG_SIDE - GAP * (n - 1)) // n)
+    y0, x0 = _zoom_at(stack, s)
+    k = s / max(ny, nx)
+    zooms, wholes, lines = [], [], []
     for a, label in zip(stack, labels):
+        z, wz = _own(a[y0 : y0 + s, x0 : x0 + s])
         t, w = _own(a)
-        tiles.append(t)
-        lines.append(f"- {label}, window {_w(w)}")
-    return montage(tiles), "\n".join(lines)
+        if k < 1:
+            t = np.asarray(Image.fromarray(t).resize((round(nx * k), round(ny * k)), Image.Resampling.LANCZOS))
+        zooms.append(z)
+        wholes.append(t)
+        lines.append(f"- {label}, zoom window {_w(wz)}, slice window {_w(w)}")
+    zoom = f"the zoom [{y0}:{y0 + s}, {x0}:{x0 + s}] at full resolution above the whole slice"
+    return grid([zooms, wholes]), zoom, "\n".join(lines)
 
 
 def _ortho(sl: np.ndarray, xz: np.ndarray, yz: np.ndarray, ws: list[tuple[float, float]]) -> np.ndarray:
@@ -87,23 +119,23 @@ def _sweep(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
     role.update({x["index"]: "rival" for x in v["rivals"]})
     keep = sorted(role)
     labels = [f"center {c[i]:.2f} px ({role[i]}, focus {f[i]:.4g})" for i in keep]
-    img, lines = _tiles(a["frames"][keep], labels)
-    head = f"Slice {r['slice']} at tilt {r['tilt_deg']:g} for the best, rival and edge candidates, left to right:"
-    return img, f"{head}\n{lines}"
+    img, zoom, lines = _tiles(a["frames"][keep], labels)
+    head = f"Slice {r['slice']} at tilt {r['tilt_deg']:g} for the best, rival and edge candidates, left to right"
+    return img, f"{head}, {zoom}:\n{lines}"
 
 
 @_figure("align.tilt_scan")
 def _tilts(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
     labels = [f"tilt {t['tilt_deg']:g} deg, slice {t['z_peak']} (focus {t['focus']:.4g})" for t in r["tilts"]]
-    img, lines = _tiles(a["best"], labels)
-    return img, f"Each tilt's best slice at center {r['center_px']:.2f} px, left to right:\n{lines}"
+    img, zoom, lines = _tiles(a["best"], labels)
+    return img, f"Each tilt's best slice at center {r['center_px']:.2f} px, left to right, {zoom}:\n{lines}"
 
 
 @_figure("align.center_compare")
 def _centers(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
     labels = [f"center {c['center_px']:.2f} px, slice {c['z_peak']} (focus {c['focus']:.4g})" for c in r["centers"]]
-    img, lines = _tiles(a["best"], labels)
-    return img, f"Each center's best slice at tilt {r['tilt_deg']:g}, left to right:\n{lines}"
+    img, zoom, lines = _tiles(a["best"], labels)
+    return img, f"Each center's best slice at tilt {r['tilt_deg']:g}, left to right, {zoom}:\n{lines}"
 
 
 @_figure("recon.preview", "volume.ortho")
