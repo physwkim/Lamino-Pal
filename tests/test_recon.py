@@ -187,6 +187,8 @@ def _fake_cli(tmp_path, body):
 FAKE_RECON = """
 import json, sys, h5py, numpy as np
 a = sys.argv
+if a[1:] == ["--version"]:
+    sys.exit(print("tomoxide 0.0.0 (fake)"))
 out, config = a[a.index("--output") + 1], a[a.index("--config") + 1]
 out = out if out.endswith(".h5") else out + ".h5"  # as tomoxide's H5Writer
 print("recon: config", open(config).read().strip(), flush=True)
@@ -198,7 +200,7 @@ with h5py.File(out, "w") as f:
 
 
 def test_run_writes_the_volume_with_its_provenance_and_leaves_nothing_else(
-    project, run_job, tmp_path, monkeypatch
+    project, run_job, tmp_path, monkeypatch, capsys
 ):
     _scan(project, "s")
     _decide(project, "s", center_px=64.5, tilt_deg=20.0)
@@ -223,6 +225,7 @@ def test_run_writes_the_volume_with_its_provenance_and_leaves_nothing_else(
     assert json.loads(prov["recipe"]) == {"algorithm": "fourierrec"}
     assert prov["tomoxide"] == _core.tomoxide_rev()
     assert [p.name for p in out.parent.iterdir() if p.name.startswith(f".{out.stem}")] == []
+    assert capsys.readouterr().out.startswith("tomoxide 0.0.0 (fake)\n")
 
 
 def test_a_failed_run_says_why_and_leaves_nothing(project, run_job, tmp_path, monkeypatch):

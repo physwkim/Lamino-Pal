@@ -385,8 +385,7 @@ CLI_CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "
 
 def tomoxide_cli() -> Path:
     """The tomoxide CLI of the core's own tomoxide commit, built by cargo from
-    the submodule once and kept in `CLI_CACHE`: `tomoxide --version` names no
-    commit, so the build is the check."""
+    the submodule once and kept in `CLI_CACHE`."""
     exe = CLI_CACHE / _core.tomoxide_rev() / "tomoxide"
     if exe.is_file():
         # Only a build that passed the checks below is kept.
@@ -454,6 +453,8 @@ def run(ctx: Context, p: RunParams) -> RunResult:
     and command line."""
     scan, path = scans.find(ctx.project, p.tag)
     exe = tomoxide_cli()
+    # The job's out.log names the build that ran.
+    sys.stdout.write(subprocess.run([str(exe), "--version"], capture_output=True, text=True, check=True).stdout)
     out = Path(p.out)
     tail: deque[str] = deque(maxlen=40)
     done = (0, 1, 0.0)

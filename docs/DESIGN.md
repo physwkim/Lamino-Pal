@@ -465,8 +465,8 @@ pyopengl)은 extra `gui`이고(`pip install '.[gui]'`), 실행은
 core와 CLI가 같은 submodule 커밋에서 빌드되므로, preview(프로세스 안)와
 batch(CLI)의 geometry가 같은 코드다. CLI는 `recon.run`이 그 커밋에서 처음 쓸 때
 cargo로 빌드해 `$XDG_CACHE_HOME/lamino-pal/<커밋>/tomoxide`(기본 `~/.cache`)에
-복사해 두고, 이후 job은 어느 CARGO_TARGET_DIR에서든 그 사본을 쓴다. job마다 `tomoxide --version`을 로그에
-남긴다.
+복사해 두고, 이후 job은 어느 CARGO_TARGET_DIR에서든 그 사본을 쓴다. job마다 커밋을
+담은 `tomoxide --version`을 out.log에 남긴다.
 
 ## 9. 시험
 
