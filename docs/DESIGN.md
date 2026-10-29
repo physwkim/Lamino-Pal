@@ -60,7 +60,8 @@ tomoxide `docs/LAMINOGRAPHY_ALIGNMENT.md`.
 | 결정 기록 | `group.decide` | instant | Python |
 
 op 비용 등급: **instant**(<0.2 s, 호출 스레드), **interactive**(수 초, 프로세스
-안 GPU, 취소 가능), **job**(분 단위, 별도 프로세스). 등급은 op 선언에 고정한다.
+안 GPU; tomoxide가 `CancelToken`을 받는 호출만 도중에 취소된다), **job**(분 단위,
+별도 프로세스). 등급은 op 선언에 고정한다.
 
 ## 3. tomoxide 선행 작업
 
@@ -116,10 +117,13 @@ maturin cdylib, `abi3-py312`, feature `cuda`를 tomoxide로 전달. 의존: tomo
   경로가 raw root 아래면 거부. 출력은 `.<name>.part`에 쓰고 rename하므로 실패나
   취소 뒤에 반쪽 파일이 남지 않는다. `scan.import`는 project당 하나씩
   (`.import.lock`) 돌며, tag 확인부터 commit까지 그 lock 안에 있다.
-- `bind`: tomoxide T1/T3 API의 얇은 wrapper. 무거운 호출은 `py.allow_threads`로
-  GIL을 놓고, Python 쪽 `Cancel` 객체가 tomoxide `CancelToken`을 감싼다. progress
-  callback은 GIL을 다시 잡고 호출하며 10 Hz로 제한한다. 배열은 numpy로 반환한다
-  (프로세스 안에서만; MCP로는 나가지 않는다).
+- `bind`: tomoxide align API(`PreppedStack`, ring, register, `judge_sweep`)와
+  필요한 projection만 읽어 prep하는 `prep::frames`의 얇은 wrapper. 무거운 호출은
+  `py.detach`로 GIL을 놓는다. align 커널은 `CancelToken`을 받지 않아 center
+  sweep은 끝까지 돌고, tilt scan은 tilt마다 부르는 callback이 예외를 내면 다음
+  tilt 전에 멈춘다. import progress callback은 GIL을 다시 잡고 호출하며 10 Hz로
+  제한한다. 배열은 numpy로 복사해 반환한다(numpy crate의 ndarray 0.17과
+  tomoxide의 0.16이 달라서; 프로세스 안에서만, MCP로는 나가지 않는다).
 - `export`: 16-bit TIFF(z 범위, p0.1/p99.9 window를 TIFF metadata에 기록),
   2×2×2 bin, 축별 MIP. h5 볼륨(bin 1에서 36.5 GB)은 z band 단위로 스트리밍.
 - 오류는 `LaminoPalError` 하위 예외로 변환하며, guard 거부는 `Refused`(이유
