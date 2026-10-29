@@ -54,9 +54,9 @@ tomoxide `docs/LAMINOGRAPHY_ALIGNMENT.md`.
 | slice 보기 | `volume.slice` | instant | h5py lazy |
 | ortho 보기 | `volume.ortho` | interactive | yz 평면은 볼륨의 모든 행을 읽음 |
 | valid FOV | `volume.valid_fov` | instant | tomoxide `Geometry::valid_fov` |
-| `export_tiff.py` | `export.tiff16` | job | core |
-| `export_bin.py` | `export.bin` | job | core |
-| `view3d.py` MIP | `export.mip` + GUI 3D 탭 | job | core |
+| `export_tiff.py` | `export.window`, `export.tiff16` | interactive, job | numpy + tifffile |
+| `export_bin.py` | `export.bin` | job | numpy, h5 → h5 float32 |
+| `view3d.py` MIP | `export.mip` + GUI 3D 탭 | job | numpy |
 | PROCESSING.log 수기 기록 | dispatcher 자동 기록, `log.tail` | instant | Python |
 | 결정 기록 | `group.decide` | instant | Python |
 
@@ -125,8 +125,6 @@ maturin cdylib, `abi3-py312`, feature `cuda`를 tomoxide로 전달. 의존: tomo
   tilt 전에 멈춘다. import progress callback은 GIL을 다시 잡고 호출하며 10 Hz로
   제한한다. 배열은 numpy로 복사해 반환한다(numpy crate의 ndarray 0.17과
   tomoxide의 0.16이 달라서; 프로세스 안에서만, MCP로는 나가지 않는다).
-- `export`: 16-bit TIFF(z 범위, p0.1/p99.9 window를 TIFF metadata에 기록),
-  2×2×2 bin, 축별 MIP. h5 볼륨(bin 1에서 36.5 GB)은 z band 단위로 스트리밍.
 - 오류는 `LaminoPalError` 하위 예외로 변환하며, guard 거부는 `Refused`(이유
   문자열 포함)로 구분한다.
 
@@ -153,6 +151,14 @@ dispatcher 안에 있으므로 어떤 op도 로그를 건너뛸 수 없다. 생�
 `final_…` 규칙), 그 이름도 같은 경로 검사를 거친다. project가 정하는 기본값(group의
 center와 tilt, `[recon]`)은 op의 `bind`가 검증 때 params에 채운다. 그래서 job은
 제출된 값으로 돌고, 이름도 그 값으로 짓는다.
+
+**export.** 스크립트의 파일을 만든 numpy와 tifffile을 그대로 쓰고, h5 볼륨(bin
+1에서 36.5 GB)은 256 MB band 단위로 읽는다. `export.tiff16`은 z 범위를 그 범위
+8번째 slice마다의 p0.1/p99.9 window로 16-bit에 대응시키고 window와 z 범위를 page
+0 description에 적는다. 261003의 z380-700 TIFF와 byte 단위로 같다. z 범위 기본값은
+볼륨 provenance의 scan이 속한 group의 z_band이며, bin이나 tilt가 다르면 거부한다.
+`export.bin`은 h5를 2×2×2 평균한 float32 h5(3D 탭의 bin-4 볼륨)로 쓰고,
+provenance의 bin을 두 배로 적는다. 노트북용 TIFF는 그 결과의 `export.tiff16`이다.
 
 **project.toml** (work_dir 루트; work_dir은 이 파일이 있는 폴더이며 따로 저장하지
 않는다):
@@ -378,7 +384,7 @@ tool_timeout_sec = 60
 
 ```
 Lamino-Pal/
-  Cargo.toml  src/{lib.rs, bl7c/, bind/, export/}   # lamino_pal_core
+  Cargo.toml  src/{lib.rs, bl7c/, bind.rs, prep.rs} # lamino_pal_core
   lib/tomoxide/                                     # submodule, physwkim/tomoxide pin
   pyproject.toml                                    # maturin, python-source = "python"
   python/lamino_pal/ …                              # §5
