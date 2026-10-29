@@ -427,7 +427,7 @@ micromamba create -f env.yaml        # python 3.12, numpy 1.26.4, h5py, silx 2.1
                                      # napari 0.6.6, dask, pyside6, pyopengl, matplotlib,
                                      # tifffile, pillow, maturin, mcp, pydantic
 git submodule update --init
-maturin develop --release --features cuda
+maturin develop --release           # pyproject의 features: extension-module, cuda
 cargo build --release --features cuda --manifest-path lib/tomoxide/Cargo.toml -p tomoxide-cli
 ```
 

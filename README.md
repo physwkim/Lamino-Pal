@@ -10,7 +10,7 @@ Design: [docs/DESIGN.md](docs/DESIGN.md).
 ```sh
 micromamba create -f env.yaml
 git submodule update --init
-micromamba run -n lamino-pal maturin develop --release -F cuda
+micromamba run -n lamino-pal maturin develop --release   # features: pyproject.toml
 micromamba run -n lamino-pal python -m pytest
 cargo nextest run --no-default-features   # Rust modules without libpython
 ```

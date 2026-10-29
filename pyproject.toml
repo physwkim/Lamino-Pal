@@ -22,7 +22,10 @@ lamino-pal-gui = "lamino_pal.gui.app:main"
 python-source = "python"
 bindings = "pyo3"
 module-name = "lamino_pal._core"
-features = ["pyo3/extension-module"]
+# A `-F` on the maturin command line replaces this list, extension-module too.
+features = ["pyo3/extension-module", "cuda"]
+# The wheel links the CUDA runtime the machine has instead of bundling it.
+auditwheel = "skip"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
