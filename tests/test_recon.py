@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from lamino_pal import LaminoPalError, Refused, _core, dispatch
 from lamino_pal.artifacts import load_h5
 from lamino_pal.ops import REGISTRY, recon
+from lamino_pal.project import RECIPE
 
 
 def _scan(project, tag, nproj=16, shape=(8, 64)):
@@ -46,10 +47,10 @@ def _decide(project, tag, **fields):
 def test_bind_freezes_the_decisions_and_names_the_volume_by_them(project):
     _scan(project, "s")
     _decide(project, "s", center_px=64.5, tilt_deg=19.5)
-    project.commit(lambda f: f.recon.update(algorithm="fourierrec"))
+    project.commit(lambda f: f.recon.update(filter_name="shepp"))
     p = validate(project, "recon.run", tag="s")
-    assert (p.center_px, p.tilt_deg, p.recipe) == (64.5, 19.5, {"algorithm": "fourierrec"})
-    assert Path(p.out) == project.work_dir / "final_s_bin2_c64p5_t19p5_fourierrec_parzen.h5"
+    assert (p.center_px, p.tilt_deg, p.recipe) == (64.5, 19.5, {**RECIPE, "filter_name": "shepp"})
+    assert Path(p.out) == project.work_dir / "final_s_bin2_c64p5_t19p5_fourierrec_shepp.h5"
     p = validate(project, "recon.split", tag="s", recipe={"filter_name": "shepp"})
     assert p.recipe == {"filter_name": "shepp"}
     assert Path(p.out) == project.work_dir / "artifacts/s_split_c64p5_t19p5.h5"

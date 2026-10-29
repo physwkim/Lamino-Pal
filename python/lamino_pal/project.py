@@ -77,6 +77,11 @@ class Scan(_Model):
     group: str | None = None
 
 
+# A new project's [recon]: the recipe the 261003 test settled on. tomoxide's
+# own default algorithm is fbp.
+RECIPE: dict[str, Any] = {"algorithm": "fourierrec", "filter_name": "parzen", "dtype": "float32"}
+
+
 class ProjectFile(_Model):
     project: Meta
     gpu: Gpu = Gpu()
@@ -120,7 +125,7 @@ class Project:
         if is_under(path.parent, Path(raw_root)):
             raise Refused(f"work directory {path.parent} is under the raw root")
         path.parent.mkdir(parents=True, exist_ok=True)
-        _write(path, ProjectFile(project=Meta(raw_root=raw_root)))
+        _write(path, ProjectFile(project=Meta(raw_root=raw_root), recon=dict(RECIPE)))
         return cls(path)
 
     @property

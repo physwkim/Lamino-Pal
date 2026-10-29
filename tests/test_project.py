@@ -1,9 +1,16 @@
+import json
 import multiprocessing as mp
 
 import pytest
 
-from lamino_pal import Refused
-from lamino_pal.project import Group, Project, Scan
+from lamino_pal import Refused, _core
+from lamino_pal.project import RECIPE, Group, Project, Scan
+
+
+def test_a_new_project_starts_from_the_recipe_and_tomoxide_reads_it_so(project):
+    assert project.data.recon == RECIPE
+    c = json.loads(_core.recipe_config(json.dumps(project.data.recon)))
+    assert {k: c[k] for k in RECIPE} == RECIPE
 
 
 def test_commit_roundtrips_and_bumps_revision(project):

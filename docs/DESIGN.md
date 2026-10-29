@@ -184,7 +184,9 @@ filter_name = "parzen"
 dtype = "float32"
 ```
 
-`[recon]`은 recipe(tomoxide `Config` 필드 표)의 기본값이다. scan, geometry,
+`[recon]`은 recipe(tomoxide `Config` 필드 표)의 기본값이다. 새 project는 261003
+시험이 고른 위 recipe(`project.RECIPE`)로 시작한다(tomoxide 자체 기본 알고리즘은
+fbp다). scan, geometry,
 출력(`file_name`, `rotation_axis`, `lamino_angle`, `output`, `save_format`,
 `backend`)은 Lamino-Pal이 정하므로 recipe에 있으면 거부한다. 나머지는
 `_core.recipe_config`가 재구성과 같은 규칙으로 검사한다: `Config`에 없는 필드도
