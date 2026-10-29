@@ -75,10 +75,8 @@ Lamino-Pal은 tomoxide 커밋에 pin된다(§8 submodule). 아래가 먼저 들�
 있었고 tomoxide-gui가 복제했다. PyO3가 세 번째 사본이 되면 안 된다. 지금
 Config→`ReconParams`/prep/algorithm은 `tomoxide::config::Config`(`recon_params`,
 `prep`, `algorithm`)에, sweep과 grid는 `tomoxide::align`(`PreppedStack`, `grid`)에
-있고 CLI와 core가 이것을 부른다. `tomoxide::align`은 v0.8.0에 있고, `Config`
-메서드(aa1d5e1)와 `PreppedStack` 재구성(47f44fd)은 branch `feat/stack-reconstruct`에
-있다. tomoxide-gui의 `worker.rs` `recon_params`와 `views/tune.rs` `build_phase`는
-아직 자기 사본이다.
+있고 CLI, tomoxide-gui의 Tune 미리보기와 core가 이것을 부른다. `tomoxide::align`은
+v0.8.0에, `Config` 메서드와 `PreppedStack` 재구성은 v0.9.0에 있다.
 
 **T2 — lamino fourierrec y-flip.** USFFT divker2d가 tomocupy의 `n1-ty-1` 행을
 그대로 써서 linerec/fbp와 y가 뒤집혀 있었다. tomoxide `15808c6`에서 고쳤고 GUI는
@@ -527,9 +525,3 @@ skip이 아니라 실패로 처리한다.
 - **M4.** preview/compare/split, job runner + `recon.run`(4 GPU), Batch/Volume
   탭.
 - **M5.** MCP 서버, 등록, e2e. export와 3D 탭.
-
-## 11. 결정 필요
-
-1. **tomoxide `feat/stack-reconstruct`(aa1d5e1, 47f44fd)를 physwkim/tomoxide에
-   넣는지.** submodule이 그 branch의 47f44fd에 pin되어 있어, push 전에는 다른 곳에서
-   clone하면 submodule을 받을 수 없다.
