@@ -55,7 +55,7 @@ tomoxide `docs/LAMINOGRAPHY_ALIGNMENT.md`.
 | ortho 보기 | `volume.ortho` | interactive | yz 평면은 볼륨의 모든 행을 읽음 |
 | valid FOV | `volume.valid_fov` | instant | tomoxide `Geometry::valid_fov` |
 | `export_tiff.py` | `export.window`, `export.tiff16` | interactive, job | numpy + tifffile |
-| `export_bin.py` | `export.bin` | job | numpy, h5 → h5 float32 |
+| `export_bin.py` | `export.bin` | job | numpy, h5 → h5 float32, 16-bit TIFF → 16-bit TIFF |
 | `view3d.py` MIP | `export.mip` + GUI 3D 탭 | job | numpy |
 | PROCESSING.log 수기 기록 | dispatcher 자동 기록, `log.tail` | instant | Python |
 | 결정 기록 | `group.decide` | instant | Python |
@@ -154,7 +154,9 @@ center와 tilt, `[recon]`)은 op의 `bind`가 검증 때 params에 채운다. �
 0 description에 적는다. 261003의 z380-700 TIFF와 byte 단위로 같다. z 범위 기본값은
 볼륨 provenance의 scan이 속한 group의 z_band이며, bin이나 tilt가 다르면 거부한다.
 `export.bin`은 h5를 2×2×2 평균한 float32 h5(3D 탭의 bin-4 볼륨)로 쓰고,
-provenance의 bin을 두 배로 적는다. 노트북용 TIFF는 그 결과의 `export.tiff16`이다.
+provenance의 bin을 두 배로 적는다. 16-bit TIFF는 export_bin.py처럼 평균을 버림한
+16-bit ImageJ TIFF로 쓰며, 노트북용 TIFF는 `export.tiff16` 결과의 `export.bin`이다.
+261003의 bin-4 TIFF와 byte 단위로 같다.
 
 **project.toml** (work_dir 루트; work_dir은 이 파일이 있는 폴더이며 따로 저장하지
 않는다):

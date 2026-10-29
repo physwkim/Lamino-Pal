@@ -9,7 +9,7 @@ volume in bands of about `BAND_BYTES`: a bin-1 volume is 36.5 GB.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, Callable, Iterator
 
 import h5py
 import numpy as np
@@ -149,41 +149,74 @@ def tiff16(ctx: Context, p: TiffParams) -> TiffResult:
 
 
 class BinParams(OutputParams):
-    volume: InPath  # h5 with exchange/data [z, y, x]
-    out: OptOutPath = None  # default: <volume stem>_binned.h5
+    volume: InPath  # h5 with exchange/data [z, y, x], or a 16-bit TIFF stack
+    out: OptOutPath = None  # default: <volume stem>_binned.h5, or .tif of a TIFF
 
 
 class BinResult(Result):
     shape: tuple[int, int, int]
 
 
+def _tiff(path: str | Path) -> bool:
+    return Path(path).suffix.lower() in (".tif", ".tiff")
+
+
 def _bin_out(p: BinParams, _: Project) -> dict[str, str]:
-    return {"out": f"{Path(p.volume).stem}_binned.h5"}
+    return {"out": f"{Path(p.volume).stem}_binned{'.tif' if _tiff(p.volume) else '.h5'}"}
+
+
+def _half(p: BinParams, shape: tuple[int, ...]) -> tuple[int, int, int]:
+    nz, ny, nx = (n // 2 for n in shape)
+    if not (nz and ny and nx):
+        raise Refused(f"{p.volume} is {'x'.join(map(str, shape))}: too thin to bin 2x2x2")
+    return nz, ny, nx
+
+
+def _binned(
+    ctx: Context, half: tuple[int, int, int], read: Callable[[int, int], Any]
+) -> Iterator[tuple[int, int, np.ndarray]]:
+    """export_bin.py's 2×2×2 means in float32 of the [z, y, x] stack whose
+    slices [z0, z1) `read(z0, z1)` reads, a band [a, b) at a time."""
+    nz, ny, nx = half
+    k = _band(4 * 8 * ny * nx)
+    for a in range(0, nz, k):
+        b = min(nz, a + k)
+        v = np.asarray(read(2 * a, 2 * b)[:, : 2 * ny, : 2 * nx], dtype=np.float32)
+        yield a, b, v.reshape(b - a, 2, ny, 2, nx, 2).mean((1, 3, 5))
+        ctx.progress(b / nz, f"slice {b}/{nz}")
 
 
 @op("export.bin", cost="job", params=BinParams, result=BinResult, default_out=_bin_out)
 def bin_(ctx: Context, p: BinParams) -> BinResult:
     """Volume `volume` 2×2×2 mean binned, an odd extent's last slice, row or
-    column dropped, into float32 volume `out`: the bin-4 volume the 3D view
-    loads of a bin-2 final. Its provenance is the source's with bin doubled
-    and binned_from naming the source. A small TIFF is `export.tiff16` of it."""
+    column dropped, into `out`. Of an h5 volume, a float32 h5 volume: the
+    bin-4 volume the 3D view loads of a bin-2 final, its provenance the
+    source's with bin doubled and binned_from naming the source. Of a 16-bit
+    TIFF stack (`export.tiff16`'s), a 16-bit ImageJ TIFF of the means
+    truncated, as export_bin.py wrote the 261003 bin-4 stacks."""
+    if _tiff(p.volume):
+        with tifffile.TiffFile(p.volume) as t:
+            s = t.series[0]
+            if s.dtype != np.uint16 or s.ndim != 3:
+                raise Refused(f"{p.volume} is a {s.dtype} {'x'.join(map(str, s.shape))} TIFF, not a 16-bit stack")
+            half = _half(p, s.shape)
+            bands = (v.astype(np.uint16) for _, _, v in _binned(ctx, half, lambda a, b: t.asarray(key=range(a, b))))
+            with written(p.out) as part:
+                tifffile.imwrite(
+                    part, bands, shape=half, dtype=np.uint16, imagej=True, metadata={"axes": "ZYX"}, compression=None
+                )
+        return BinResult(shape=half, artifacts=[p.out])
     d = data(p.volume)
-    nz, ny, nx = (n // 2 for n in d.shape)
-    if not (nz and ny and nx):
-        raise Refused(f"{p.volume} is {'x'.join(map(str, d.shape))}: too thin to bin 2x2x2")
+    half = _half(p, d.shape)
     prov = provenance(p.volume)
     if "bin" in prov:
         prov["bin"] *= 2
-    k = _band(4 * 8 * ny * nx)
     with written(p.out) as part, h5py.File(part, "w") as f:
-        out = f.create_dataset("exchange/data", (nz, ny, nx), np.float32)
-        for a in range(0, nz, k):
-            b = min(nz, a + k)
-            v = np.asarray(d[2 * a : 2 * b, : 2 * ny, : 2 * nx], dtype=np.float32)
-            out[a:b] = v.reshape(b - a, 2, ny, 2, nx, 2).mean((1, 3, 5))
-            ctx.progress(b / nz, f"slice {b}/{nz}")
+        out = f.create_dataset("exchange/data", half, np.float32)
+        for a, b, v in _binned(ctx, half, lambda a, b: d[a:b]):
+            out[a:b] = v
         f.create_group("lamino_pal/provenance").attrs.update({**prov, "binned_from": str(p.volume)})
-    return BinResult(shape=(nz, ny, nx), artifacts=[p.out])
+    return BinResult(shape=half, artifacts=[p.out])
 
 
 class MipParams(RangeParams, OutputParams):

@@ -90,6 +90,26 @@ def test_bin_means_each_2x2x2_cube_and_drops_an_odd_edge(project, run_job, small
     assert (prov["bin"], prov["tilt_deg"], prov["binned_from"]) == (4, 20.0, path)
 
 
+def test_bin_of_a_16bit_tiff_is_export_bin_py_streamed(project, run_job, small_bands):
+    path, _ = _volume(project)
+    tif = run_job(project, "export.tiff16", {"volume": path, "z": (0, 37)}).artifacts[0]
+    seen = []
+    r = run_job(project, "export.bin", {"volume": tif}, lambda f, m: seen.append(m))
+    assert r.shape == (18, 6, 5) and r.artifacts[0] == str(project.work_dir / "v_z0-37_16bit_binned.tif")
+    # export_bin.py, verbatim.
+    a = tifffile.imread(tif)
+    z, y, x = (s // 2 * 2 for s in a.shape)
+    a = a[:z, :y, :x].astype(np.float32)
+    a = a.reshape(z // 2, 2, y // 2, 2, x // 2, 2).mean((1, 3, 5))
+    with tifffile.TiffFile(r.artifacts[0]) as t:
+        assert t.is_imagej and t.pages[0].compression == 1
+        np.testing.assert_array_equal(t.asarray(), a.astype(np.uint16))
+    assert seen[-1] == "slice 18/18" and len(seen) > 3
+    tifffile.imwrite(project.work_dir / "f.tif", np.zeros((4, 3), np.float32))
+    with pytest.raises(Refused, match="is a float32 4x3 TIFF, not a 16-bit stack"):
+        run_job(project, "export.bin", {"volume": str(project.work_dir / "f.tif")})
+
+
 def test_mip_takes_each_axis_maximum(project, run_job, small_bands):
     path, vol = _volume(project)
     r = run_job(project, "export.mip", {"volume": path, "z": (2, 33)})
@@ -107,5 +127,14 @@ def test_tiff16_writes_the_261003_export_byte_for_byte(golden_project, run_job):
     r = run_job(golden_project, "export.tiff16", params)
     assert r.window == (-0.0030219246202614156, 0.0030576782301068306)
     want = d / "final_step1000_bin2_c504_t20_z380-700_16bit.tif"
+    md5 = [hashlib.md5(open(p, "rb").read()).hexdigest() for p in (want, r.artifacts[0])]
+    assert md5[0] == md5[1]
+
+
+@pytest.mark.golden
+def test_bin_of_the_261003_tiff_writes_its_bin4_tiff_byte_for_byte(golden_project, run_job):
+    d = DATA / "tomoxide"
+    r = run_job(golden_project, "export.bin", {"volume": str(d / "final_step1000_bin2_c504_t20_z380-700_16bit.tif")})
+    want = d / "final_step1000_bin4_c504_t20_z380-700_16bit.tif"
     md5 = [hashlib.md5(open(p, "rb").read()).hexdigest() for p in (want, r.artifacts[0])]
     assert md5[0] == md5[1]
