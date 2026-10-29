@@ -3,7 +3,7 @@ import multiprocessing as mp
 import pytest
 
 from lamino_pal import Refused
-from lamino_pal.project import Group, Project
+from lamino_pal.project import Group, Project, Scan
 
 
 def test_commit_roundtrips_and_bumps_revision(project):
@@ -39,6 +39,25 @@ def test_invalid_mutation_is_rejected(project):
     assert Project(project.path).revision == 0
 
 
+@pytest.mark.parametrize(
+    "bad, why",
+    [
+        (lambda f: f.scan.extend([_scan("a"), _scan("a")]), r"scan tag \['a'\] repeated"),
+        (lambda f: f.group.extend([Group(name="g"), Group(name="g")]), r"group \['g'\] repeated"),
+        (lambda f: f.scan.append(_scan("a", group="nope")), "scan a: no group nope"),
+        (lambda f: f.scan.append(_scan("../a")), "pattern"),
+    ],
+)
+def test_scan_tags_and_groups_are_unique_and_resolve(project, bad, why):
+    with pytest.raises(ValueError, match=why):
+        project.commit(bad)
+    assert Project(project.path).revision == 0
+
+
+def _scan(tag, group=None):
+    return Scan(tag=tag, kind="step", h5=f"{tag}.h5", bin=2, group=group)
+
+
 def test_work_dir_under_raw_root_is_refused(tmp_path):
     with pytest.raises(Refused):
         Project.create(tmp_path / "raw" / "w" / "project.toml", str(tmp_path / "raw"))
@@ -58,11 +77,10 @@ def _writer(path, tag, n, out):
 
 def test_concurrent_commits_never_repeat_or_lose_a_revision(project):
     n = 25
-    q = mp.get_context("fork").Queue()
-    ws = [
-        mp.get_context("fork").Process(target=_writer, args=(project.path, t, n, q))
-        for t in "ab"
-    ]
+    # Not fork: an import earlier in the session leaves rayon threads running.
+    ctx = mp.get_context("spawn")
+    q = ctx.Queue()
+    ws = [ctx.Process(target=_writer, args=(project.path, t, n, q)) for t in "ab"]
     for w in ws:
         w.start()
     got = dict(q.get(timeout=60) for _ in ws)

@@ -11,16 +11,20 @@ import os
 import tomllib
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Iterator, Literal
+from typing import Annotated, Any, Callable, Iterator, Literal
 
 import tomli_w
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from lamino_pal import Refused
 
 
 class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+
+# A scan tag or group name: it becomes part of file names.
+Tag = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
 
 
 class Meta(_Model):
@@ -52,7 +56,7 @@ class Decision(_Model):
 class Group(_Model):
     """Scans sharing one mount, hence one center, tilt and sample band."""
 
-    name: str
+    name: Tag
     center_px: float | None = None  # full-resolution detector column
     tilt_deg: float | None = None
     z_band: ZBand | None = None
@@ -60,10 +64,10 @@ class Group(_Model):
 
 
 class Scan(_Model):
-    tag: str
+    tag: Tag
     kind: Literal["step", "fly"]
     raw: str | None = None  # under raw_root, the on-disk (NFD) name
-    h5: str  # under the work directory
+    h5: str  # resolved against the work directory
     bin: int = Field(ge=1)
     group: str | None = None
 
@@ -74,6 +78,24 @@ class ProjectFile(_Model):
     group: list[Group] = []
     scan: list[Scan] = []
     recon: dict[str, Any] = {}  # tomoxide Config fields
+
+    @model_validator(mode="after")
+    def _references(self) -> ProjectFile:
+        for what, names in [
+            ("scan tag", [s.tag for s in self.scan]),
+            ("group", [g.name for g in self.group]),
+        ]:
+            dup = {n for n in names if names.count(n) > 1}
+            if dup:
+                raise ValueError(f"{what} {sorted(dup)} repeated")
+        groups = {g.name for g in self.group}
+        for s in self.scan:
+            if s.group is not None and s.group not in groups:
+                raise ValueError(f"scan {s.tag}: no group {s.group}")
+        return self
+
+    def find_scan(self, tag: str) -> Scan | None:
+        return next((s for s in self.scan if s.tag == tag), None)
 
 
 def is_under(path: Path, root: Path) -> bool:

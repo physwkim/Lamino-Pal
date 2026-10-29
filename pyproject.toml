@@ -19,3 +19,4 @@ features = ["pyo3/extension-module"]
 testpaths = ["tests"]
 # napari's pytest plugins import napari into every run.
 addopts = "-p no:napari -p no:npe2 -p no:napari-plugin-engine"
+markers = ["golden: imports LAMINO_PAL_DATA and compares with the 261003 h5 files"]
