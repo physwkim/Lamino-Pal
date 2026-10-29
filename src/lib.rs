@@ -39,6 +39,13 @@ mod python {
         cfg!(feature = "cuda")
     }
 
+    /// The devices tomoxide runs CUDA work on: `TOMOXIDE_CUDA_DEVICES`, else
+    /// every visible one; none without the `cuda` feature.
+    #[pyfunction]
+    fn cuda_devices() -> Vec<i32> {
+        tomoxide::cuda::selected_devices()
+    }
+
     fn bl7c_err(e: bl7c::Error) -> PyErr {
         match e {
             bl7c::Error::Refused(why) => Refused::new_err(why),
@@ -96,6 +103,7 @@ mod python {
         m.add_function(wrap_pyfunction!(version, m)?)?;
         m.add_function(wrap_pyfunction!(tomoxide_rev, m)?)?;
         m.add_function(wrap_pyfunction!(cuda_enabled, m)?)?;
+        m.add_function(wrap_pyfunction!(cuda_devices, m)?)?;
         m.add_function(wrap_pyfunction!(bl7c_discover, m)?)?;
         m.add_function(wrap_pyfunction!(bl7c_import, m)?)?;
         crate::bind::add(m)

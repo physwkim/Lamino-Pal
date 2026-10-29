@@ -1,3 +1,8 @@
+import os
+
+# Before anything can start a thread: GPU ops run on this process's one GPU.
+os.environ.setdefault("TOMOXIDE_CUDA_DEVICES", "0")
+
 import pytest
 
 from lamino_pal.ops import load_all

@@ -198,6 +198,9 @@ params, progress, eta, result)에 있다.
 
 **GPU.** GPU마다 `$XDG_RUNTIME_DIR/lamino-pal/gpu<N>.lock`을 exclusive flock으로
 잡는다. 기본값은 interactive = GPU 0, batch = GPU 1–3이고, 설정으로 바꾼다.
+tomoxide는 CUDA 장치를 호출마다 `TOMOXIDE_CUDA_DEVICES`에서 읽으므로(없으면 GPU
+전부), 프로세스의 GPU는 띄우는 쪽이 이 env로 하나만 정하고 실행 중에는 바꾸지
+않는다. dispatcher는 그 GPU가 project의 interactive GPU일 때만 GPU op를 돌린다.
 `recon.run`은 scan 여러 개면 GPU당 scan 하나(run_finals.sh 방식), scan 하나면
 CLI의 multi-GPU shard를 쓴다.
 

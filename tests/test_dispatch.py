@@ -146,3 +146,24 @@ def test_gpu_lock_is_exclusive():
         t.join()
     with dispatch.gpu_lock(3, 0.1) as n:
         assert n == 3
+
+
+def _gpu(ctx, p):
+    """Record the GPU it ran under."""
+    ctx.progress(0.0, str(ctx.gpu))
+    return Result()
+
+
+def test_a_gpu_op_runs_only_on_the_gpu_this_process_is_pinned_to(project, monkeypatch):
+    o = build("test.gpu", cost="interactive", params=Params, result=Result, fn=_gpu, gpu=True)
+    monkeypatch.setitem(REGISTRY, "test.gpu", o)
+    seen = []
+    run = lambda: dispatch.run(  # noqa: E731
+        "test.gpu", {}, project=project, caller="cli", progress=lambda f, m: seen.append(m)
+    )
+    run()
+    assert seen == ["0"]
+    project.commit(lambda f: setattr(f.gpu, "interactive", 2))
+    with pytest.raises(Refused, match="interactive GPU 2; this process's CUDA runs on GPU 0"):
+        run()
+    assert seen == ["0"]

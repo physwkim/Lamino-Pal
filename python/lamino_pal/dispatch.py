@@ -11,6 +11,7 @@ import os
 import tempfile
 import time
 from contextlib import contextmanager, nullcontext
+from functools import cache
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -68,7 +69,16 @@ def run(
         p = _resolve_paths(op, op.params.model_validate(params), project)
         entry["params"] = p.model_dump(mode="json")
         ctx = Context(project, caller, progress or (lambda frac, msg: None))
-        lock = gpu_lock(project.data.gpu.interactive, gpu_wait_s) if op.gpu else nullcontext()
+        lock = nullcontext()
+        if op.gpu:
+            gpu, want = process_gpu(), project.data.gpu.interactive
+            if gpu != want:
+                on = "no single GPU" if gpu is None else f"GPU {gpu}"
+                raise Refused(
+                    f"{name} runs on the interactive GPU {want}; this process's CUDA "
+                    f"runs on {on} (start it with TOMOXIDE_CUDA_DEVICES={want})"
+                )
+            lock = gpu_lock(gpu, gpu_wait_s)
         with lock as gpu:
             ctx.gpu = gpu
             r = op.fn(ctx, p)
@@ -113,6 +123,16 @@ def _resolve_paths(op: Op, p: Params, project: Project) -> Params:
             raise Refused(f"{k}: {path} exists; pass overwrite to replace it")
         upd[k] = str(path)
     return p.model_copy(update=upd)
+
+
+@cache
+def process_gpu() -> int | None:
+    """The GPU tomoxide runs this process's CUDA work on, or None for none or
+    several. The launcher fixes it with TOMOXIDE_CUDA_DEVICES, which tomoxide
+    reads on every call; nothing sets it in a running process, where setenv
+    racing another thread's getenv is undefined."""
+    d = _core.cuda_devices()
+    return d[0] if len(d) == 1 else None
 
 
 @contextmanager
