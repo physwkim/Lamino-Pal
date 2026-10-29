@@ -3,8 +3,11 @@ import os
 # Before anything can start a thread: GPU ops run on this process's one GPU.
 os.environ.setdefault("TOMOXIDE_CUDA_DEVICES", "0")
 
+from pathlib import Path
+
 import pytest
 
+from lamino_pal import dispatch
 from lamino_pal.ops import load_all
 from lamino_pal.project import Project
 
@@ -36,3 +39,21 @@ def run_job():
 @pytest.fixture(autouse=True)
 def gpu_lock_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "run"))
+
+
+DATA = Path(os.environ.get("LAMINO_PAL_DATA", "~/work/261003_Lamino_test")).expanduser()
+
+
+@pytest.fixture(scope="session")
+def golden_project(tmp_path_factory):
+    """A project of two 261003 bin-2 scans: step1000 (a full turn closed at
+    360 deg) and the fly half turn f180_N500."""
+    assert DATA.is_dir(), f"LAMINO_PAL_DATA {DATA} is missing"
+    p = Project.create(tmp_path_factory.mktemp("golden") / "project.toml", str(DATA))
+    for tag, h5, kind in [
+        ("step1000", "tomoxide/step1000_bin2.h5", "step"),
+        ("f180_N500", "tomoxide/fly/f180_N500_2dps_0p18s_1p5ET_bin2.h5", "fly"),
+    ]:
+        params = {"tag": tag, "h5": str(DATA / h5), "bin": 2, "kind": kind}
+        dispatch.run("scan.adopt", params, project=p, caller="cli")
+    return p
