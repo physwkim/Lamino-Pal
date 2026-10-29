@@ -39,7 +39,7 @@ def _steps(ctx, p):
     return StepsResult(n=p.n, gpu=ctx.gpu, child=child, artifacts=[p.out])
 
 
-def _out(p):
+def _out(p, _):
     return {"out": f"artifacts/steps{p.n}.txt"}
 
 

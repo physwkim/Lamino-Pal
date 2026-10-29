@@ -67,9 +67,10 @@ class Op:
     result: type[Result]
     fn: Callable[..., Result]
     gpu: bool
-    # Output-path field -> name, from the validated params; covers every
+    # (params, project) -> output-path field -> name, from the validated
+    # params and the project's fixed facts (a scan's bin); covers every
     # optional `OutPath` field (checked in `build`).
-    default_out: Callable[[Any], dict[str, str]] | None = None
+    default_out: Callable[[Any, Any], dict[str, str]] | None = None
     # (params, project) -> params with the defaults the project decides filled
     # in. It runs at validation, so a job runs with the values it was
     # submitted with and `default_out` names the file from them. It must
@@ -105,7 +106,7 @@ def build(
     result: type[Result],
     fn: Callable[..., Result],
     gpu: bool = False,
-    default_out: Callable[[Any], dict[str, str]] | None = None,
+    default_out: Callable[[Any, Any], dict[str, str]] | None = None,
     bind: Callable[[Any, Any], Any] | None = None,
 ) -> Op:
     if not _NAME.match(name):
@@ -134,7 +135,7 @@ def op(
     params: type[Params],
     result: type[Result],
     gpu: bool = False,
-    default_out: Callable[[Any], dict[str, str]] | None = None,
+    default_out: Callable[[Any, Any], dict[str, str]] | None = None,
     bind: Callable[[Any, Any], Any] | None = None,
 ) -> Callable[[Callable[..., Result]], Callable[..., Result]]:
     def register(fn: Callable[..., Result]) -> Callable[..., Result]:

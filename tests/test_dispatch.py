@@ -98,7 +98,7 @@ def test_omitted_output_path_takes_the_default_name(project, monkeypatch):
         params=NamedParams,
         result=WriteResult,
         fn=_write,
-        default_out=lambda p: {"out": f"{p.tag}.h5"},
+        default_out=lambda p, _: {"out": f"{p.tag}.h5"},
     )
     monkeypatch.setitem(REGISTRY, o.name, o)
     r = dispatch.run("test.named", {"tag": "a"}, project=project, caller="mcp")
@@ -128,7 +128,7 @@ def test_bind_freezes_project_defaults_before_naming_the_output(project, monkeyp
         params=BoundParams,
         result=WriteResult,
         fn=_write,
-        default_out=lambda p: {"out": f"{p.tag}_{p.level}.h5"},
+        default_out=lambda p, _: {"out": f"{p.tag}_{p.level}.h5"},
         bind=bind,
     )
     project.commit(lambda f: f.recon.update(level=1))

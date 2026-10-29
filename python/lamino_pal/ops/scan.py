@@ -108,7 +108,7 @@ class ImportResult(Result):
     cost="job",
     params=ImportParams,
     result=ImportResult,
-    default_out=lambda p: {"out": f"h5/{p.tag}_bin{p.bin}.h5"},
+    default_out=lambda p, _: {"out": f"h5/{p.tag}_bin{p.bin}.h5"},
 )
 def import_(ctx: Context, p: ImportParams) -> ImportResult:
     """Import raw scan folder `raw` as DXchange h5 `out`, bin×bin mean binned,

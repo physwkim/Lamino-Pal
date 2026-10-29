@@ -17,7 +17,7 @@ from lamino_pal import Refused, _core, scans, units
 from lamino_pal.artifacts import save_h5
 from lamino_pal.dispatch import Context
 from lamino_pal.ops.registry import OptOutPath, OutputParams, Params, Result, op
-from lamino_pal.project import Group, Scan
+from lamino_pal.project import Group, Project, Scan
 
 DEFAULT_TILT_DEG = 20.0
 
@@ -231,7 +231,7 @@ class TiltScanResult(Result):
     tilts: list[TiltFocus]
 
 
-def _tilt_scan_out(p: TiltScanParams) -> dict[str, str]:
+def _tilt_scan_out(p: TiltScanParams, _: Project) -> dict[str, str]:
     c = "group" if p.center_px is None else _stem(p.center_px)
     t = p.tilts_deg
     return {"out": f"artifacts/{p.tag}_tilts_c{c}_t{_stem(min(t))}-{_stem(max(t))}.h5"}
@@ -290,7 +290,7 @@ class CompareResult(Result):
     centers: list[CenterFocus]
 
 
-def _compare_out(p: CompareParams) -> dict[str, str]:
+def _compare_out(p: CompareParams, _: Project) -> dict[str, str]:
     c = p.centers_px
     t = "group" if p.tilt_deg is None else _stem(p.tilt_deg)
     return {"out": f"artifacts/{p.tag}_centers_{_stem(min(c))}-{_stem(max(c))}_t{t}.h5"}
