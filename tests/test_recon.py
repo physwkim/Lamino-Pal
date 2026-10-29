@@ -173,6 +173,10 @@ def test_frc_is_one_for_the_same_image_and_none_for_independent_noise():
     b = sig + 0.3 * rng.normal(size=(n, n))
     curve, pearson = recon.frc(a, b, 60)
     assert 0.8 < pearson < 1.0 and curve[1:6].min() > 0.9
+    # Of the values themselves: the taper is the FFT's alone.
+    yy, xx = np.indices((n, n))
+    inside = np.hypot(yy - n / 2, xx - n / 2) < 60
+    assert pearson == pytest.approx(np.corrcoef(a[inside], b[inside])[0, 1])
     curve, pearson = recon.frc(rng.normal(size=(n, n)), rng.normal(size=(n, n)), 60)
     # Each ring is off zero by about 1/sqrt(its pixels), either way.
     assert abs(pearson) < 0.05 and abs(curve[4:].mean()) < 0.06 and np.sqrt((curve[4:] ** 2).mean()) < 0.2
@@ -320,7 +324,7 @@ def test_split_on_step1000(golden_project, run_job):
     # Measured: the middle slice sees the whole 504 px disk; FRC 0.27 at ring
     # 73, 0.12 at 74.
     assert (r.at, r.radius_px) == ((545, 512), 504.0)
-    assert r.correlation == pytest.approx(0.7197, abs=1e-3)
+    assert r.correlation == pytest.approx(0.7297, abs=1e-3)
     assert r.resolution_px == pytest.approx(1024 / 74)
 
 

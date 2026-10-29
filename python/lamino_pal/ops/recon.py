@@ -296,9 +296,9 @@ def frc(a: np.ndarray, b: np.ndarray, radius: float) -> tuple[np.ndarray, float]
     inside = d < radius
     taper = np.clip((radius - d) / TAPER_PX, 0, 1)
     w = 0.5 - 0.5 * np.cos(np.pi * taper)
+    pearson = float(np.corrcoef(a[inside], b[inside])[0, 1])
     a = (a - a[inside].mean()) * w
     b = (b - b[inside].mean()) * w
-    pearson = float(np.corrcoef(a[inside], b[inside])[0, 1])
     fa, fb = np.fft.fftshift(np.fft.fft2(a)), np.fft.fftshift(np.fft.fft2(b))
     ring = np.rint(np.hypot(yy - n // 2, xx - n // 2)).astype(int).ravel()
     m = n // 2
