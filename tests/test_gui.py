@@ -284,6 +284,8 @@ def test_an_instant_op_shows_its_figure_and_a_job_its_end(app, win):
     assert ended[0].id == st.id and ended[0].status == "done"
     rows = [win.jobs.table.item(r, 0).text() for r in range(win.jobs.table.rowCount())]
     assert st.id in rows
+    t = win.jobs.table
+    assert t.columnWidth(0) >= t.sizeHintForColumn(0) > t.horizontalHeader().defaultSectionSize()
     dialog.close()
 
 
