@@ -171,7 +171,8 @@ class VolumeTab(Tab):
             v.add_outlines(name="cross", edge_color="yellow")
         self.shape = d.shape
         self.at = [nz // 2, ny // 2, nx // 2]
-        what = ", ".join(f"{k} {prov[k]}" for k in ("tag", "bin", "center_px", "tilt_deg") if k in prov)
+        shown = {"tag": "tag {}", "bin": "bin {}", "center_px": "center {:.2f} px", "tilt_deg": "tilt {:g}°"}
+        what = ", ".join(f.format(prov[k]) for k, f in shown.items() if k in prov)
         self.info.setText(f"<b>{vol}</b> {nz}×{ny}×{nx} {d.dtype}" + (f"; {what}" if what else "; no provenance"))
         for s in (self.z0, self.z1):
             s.setRange(0, nz - 1)

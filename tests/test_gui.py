@@ -763,6 +763,11 @@ def test_an_export_job_leaves_the_header_naming_the_volume(app, win):
     assert [p.getGraphTitle() for p in ex.mips.values()] == [f"MIP {t}" for _, t in MIPS]
 
 
+def test_the_volume_header_reads_its_provenance_in_units(win):
+    win._select("volume", "v.h5")
+    assert win.tabs["Volume"].info.text().endswith("; tag s, bin 2, center 64.50 px, tilt 20°")
+
+
 def test_the_volume_tab_shows_the_band_carried_to_the_volumes_tilt(app, win):
     (win.project.work_dir / "fig.png").write_bytes(b"")
     d20, d30 = _core.lamino_depth(32, 20.0), _core.lamino_depth(32, 30.0)
