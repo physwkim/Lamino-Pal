@@ -399,8 +399,8 @@ def _click(view, y, x, drag=0):
 
 def framed(view):
     """The labels whose tiles are framed."""
-    labels = view.model.layers["labels"]
-    return [t for t, c in zip(labels.features["label"], labels.edge_color) if c[3] > 0]
+    labels, frames = view.model.layers["labels"], view.model.layers["frames"]
+    return [t for t, c in zip(labels.features["label"], frames.edge_color) if c[3] > 0]
 
 
 def test_an_ambiguous_sweep_shows_every_candidate_to_pick_by_eye(app, win):
@@ -445,7 +445,7 @@ def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_under_its_slice(ap
     win.show_tab("Align")
     at.on_job(st)
     pump(app, 0.1)
-    assert names(at.view) == ["tilts", "labels"]
+    assert names(at.view) == ["tilts", "frames", "labels"]
     # Slices in the top row, their xz planes under them.
     assert at._tiles == [(0, 0, 8, 8), (0, 12, 8, 8), (12, 0, 7, 8), (12, 12, 9, 8)]
     assert at._values == [19, 21, 19, 21]

@@ -151,12 +151,21 @@ class AlignTab(Tab):
         model.add_shapes(
             [np.array([[y - e, x - e], [y + h - 1 + e, x + w - 1 + e]]) for y, x, h, w in self._tiles],
             shape_type="rectangle",
-            name="labels",
+            name="frames",
             edge_width=gap,
             edge_color="transparent",
             face_color="transparent",
+        )
+        # A label in screen px hangs from its tile's corner into the tile
+        # ("lower_left" of a point): the gaps are too narrow for it zoomed out.
+        model.add_points(
+            [(y - 0.5, x - 0.5) for y, x, _, _ in self._tiles],
+            name="labels",
+            size=0,
+            border_width=0,
+            face_color="transparent",
             features={"label": self._labels},
-            text={"string": "{label}", "anchor": "upper_left", "color": "yellow", "size": 12},
+            text={"string": "{label}", "anchor": "lower_left", "color": "yellow", "size": 12},
         )
         model.layers.selection.active = img
 
@@ -170,7 +179,7 @@ class AlignTab(Tab):
             model.dims.set_current_step(0, i)
             model.text_overlay.text = self._labels[i]
         else:
-            model.layers["labels"].edge_color = ["blue" if x == v else "transparent" for x in self._values]
+            model.layers["frames"].edge_color = ["blue" if x == v else "transparent" for x in self._values]
         self.plot.removeMarker("picked")
         self.plot.addXMarker(v, legend="picked", text="picked", color="blue")
 

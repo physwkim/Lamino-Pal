@@ -147,3 +147,45 @@ def test_every_volume_view_is_fit_to_the_canvas_it_is_drawn_on(app, project):
     finally:
         w.close()
         pump(app, 0.3)
+
+
+def test_each_montage_label_is_drawn_inside_its_tile(app, project):
+    from lamino_pal.artifacts import save_h5
+    from lamino_pal.gui.window import MainWindow
+    from lamino_pal.jobs import JobState
+
+    rng = np.random.default_rng(0)
+    tilts = [
+        {"tilt_deg": t, "focus": 1.0, "z_peak": 2, "band": None, "depth": 48, "slice": 24} for t in (19, 21)
+    ]
+    out = project.work_dir / "tilts.h5"
+    save_h5(out, {}, layer=rng.random((2, 96, 96), dtype="f4"), xz=rng.random((2, 48, 96), dtype="f4"))
+    st = JobState(
+        id="j", project="", op="align.tilt_scan", params={}, caller="gui", gpu=None, status="done", created="",
+        result={"center_px": 64.5, "tilts": tilts, "artifacts": [str(out)]},
+    )
+    w = MainWindow(project)
+    w.resize(1600, 1000)
+    w.setAttribute(qt.Qt.WA_DontShowOnScreen)
+    w.show()
+    w.show_tab("Align")
+    at = w.tabs["Align"]
+    at.on_job(st)
+    pump(app, 0.5)
+    try:
+        img = at.view.qt_viewer.screenshot(flash=False)[..., :3].astype(int)
+        ys, xs = np.nonzero((img[..., 0] > 150) & (img[..., 1] > 150) & (img[..., 2] < 100))
+        assert len(ys), "no label drawn"
+        cam = at.view.model.camera
+        h, w_ = img.shape[:2]
+        rows = cam.center[-2] + (ys + 0.5 - h / 2) / cam.zoom
+        cols = cam.center[-1] + (xs + 0.5 - w_ / 2) / cam.zoom
+        # Pixel i spans i ± 0.5; antialiasing may bleed a screen px.
+        e = 0.5 + 1.5 / cam.zoom
+        inside = np.zeros(len(ys), bool)
+        for y, x, th, tw in at._tiles:
+            inside |= (rows > y - e) & (rows < y + th - 1 + e) & (cols > x - e) & (cols < x + tw - 1 + e)
+        assert inside.all(), (rows[~inside].min(), rows[~inside].max(), at._tiles, cam.zoom)
+    finally:
+        w.close()
+        pump(app, 0.3)
