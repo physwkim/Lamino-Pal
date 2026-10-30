@@ -110,6 +110,12 @@ class Tab(qt.QWidget):
         self.viewers: list[Viewer] = []
         self.graphs: dict[str, PlotWidget] = {}
 
+    def heightForWidth(self, w: int) -> int:
+        # Read by the _Page scrolling the tab as its least height; a layout's
+        # is its preferred, and a word-wrapped label in it would have the tab
+        # scroll at any window size.
+        return self.layout().totalMinimumHeightForWidth(w)
+
     def section(self, title: str) -> qt.QFormLayout:
         """A titled form in the parameters panel."""
         box = qt.QGroupBox(title)

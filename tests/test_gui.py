@@ -1015,6 +1015,24 @@ def test_the_window_fits_a_laptops_screen_and_a_tab_too_big_for_it_scrolls(app, 
     assert t.viewport().height() == 3 * t.verticalHeader().defaultSectionSize()
 
 
+def test_a_tab_scrolls_only_when_shorter_than_its_least_height(app, win):
+    """Volume's and Export's word-wrapped labels give their layouts a height
+    for width, which the scroll area reads as the least."""
+    win.resize(1600, 1000)
+    win._select("volume", "v.h5")
+    for tab in win.tabs.values():
+        win.show_tab(tab.NAME)
+        pump(app, 0.2)
+        page = tab.parentWidget().parentWidget()
+        assert tab.minimumSizeHint().height() <= page.viewport().height(), tab.NAME
+        assert page.verticalScrollBar().maximum() == 0, tab.NAME
+    win.resize(1280, 720)
+    win.show_tab("Volume")
+    pump(app, 0.2)
+    vt = win.tabs["Volume"]
+    assert vt.height() == vt.layout().totalMinimumHeightForWidth(vt.width()) > vt.parentWidget().height()
+
+
 def test_a_preview_result_and_the_focus_plot_leave_the_views_their_height(app, win):
     win.resize(1600, 1000)
     pt, vt = win.tabs["Preview"], win.tabs["Volume"]
