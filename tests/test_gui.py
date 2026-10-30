@@ -637,7 +637,6 @@ def test_a_preview_is_made_again_only_as_its_inputs_change_and_a_compare_shown_s
 
 
 def test_a_graph_draws_its_hangul_title_in_a_font_that_has_it(app, scene, monkeypatch):
-    from lamino_pal.gui.tabs.align import TILT_FOCUS
     from lamino_pal.gui.window import MainWindow
 
     if not qt.QFontDatabase.families(qt.QFontDatabase.WritingSystem.Korean):
@@ -645,7 +644,8 @@ def test_a_graph_draws_its_hangul_title_in_a_font_that_has_it(app, scene, monkey
     monkeypatch.setitem(matplotlib.rcParams, "font.family", ["sans-serif"])
     w = MainWindow(scene)
     plot = w.tabs["Align"].plot
-    plot.setGraphTitle(TILT_FOCUS)
+    # BL7C's folders: "360도 step".
+    plot.setGraphTitle("360도 step/Step_N1000_0p18s")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         plot.saveGraph(io.BytesIO(), fileFormat="png")
