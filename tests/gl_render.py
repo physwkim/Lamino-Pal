@@ -256,3 +256,32 @@ def test_the_volume_views_cross_is_drawn_whole_zoomed_out(app, project):
     finally:
         w.close()
         pump(app, 0.3)
+
+
+def test_the_drift_pair_is_drawn_alone_over_the_projections(app, project):
+    from types import SimpleNamespace
+
+    from lamino_pal.gui.window import MainWindow
+
+    w = MainWindow(project)
+    w.resize(1600, 1000)
+    w.setAttribute(qt.Qt.WA_DontShowOnScreen)
+    w.show()
+    w.show_tab("Raw")
+    rt = w.tabs["Raw"]
+    rt.view.replace("projections", np.ones((3, 64, 64), "f4"), contrast_limits=(0, 1), colormap="gray")
+    first = np.zeros((64, 64), "f4")
+    first[:, :32] = 1
+    rt._drift(SimpleNamespace(arrays={"first": first, "turn": np.zeros_like(first)}, first=0, turn=1, dy_px=0, dx_px=0))
+    pump(app, 0.5)
+    try:
+        img = rt.view.qt_viewer.screenshot(flash=False)[..., :3].astype(int)
+        cam = rt.view.model.camera
+        h, w_ = img.shape[:2]
+        row = round(h / 2 + (32 - cam.center[-2]) * cam.zoom)
+        at = [img[row, round(w_ / 2 + (c - cam.center[-1]) * cam.zoom)] for c in (16, 48)]
+        # Green where only the first is bright, black where neither is.
+        assert [list(p) for p in at] == [[0, 255, 0], [0, 0, 0]]
+    finally:
+        w.close()
+        pump(app, 0.3)

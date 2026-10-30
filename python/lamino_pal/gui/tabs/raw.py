@@ -109,7 +109,8 @@ class RawTab(Tab):
     def _drift(self, r: Result) -> None:
         a = r.arrays
         w = (float(min(a["first"].min(), a["turn"].min())), float(max(a["first"].max(), a["turn"].max())))
-        self.view.replace("first", a["first"], contrast_limits=w, colormap="green", blending="additive")
+        # The pair alone: added to what is under it, it would wash it out white.
+        self.view.replace("first", a["first"], contrast_limits=w, colormap="green", blending="opaque")
         self.view.replace("turn", a["turn"], contrast_limits=w, colormap="magenta", blending="additive")
         self.drift_out.setText(
             f"projection {r.turn} against {r.first}: dy {r.dy_px:+.1f} px, dx {r.dx_px:+.1f} px (full resolution)"

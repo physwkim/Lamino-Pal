@@ -78,10 +78,6 @@ lamino-pal-gui --project ~/work/lamino_pal_demo/project.toml
 
    ![드리프트](06-drift.png)
 
-   > 주의: 두 레이어는 additive로 겹치므로 `projections` 레이어가 보이는 채로는
-   > 화면이 하얗게 포화된다. layer list에서 `projections`의 눈을 꺼야 위
-   > 그림처럼 보인다.
-
 4. **Tilt flow**는 optical flow로 tilt를 어림한다. tilt scan의 교차 확인용이고
    결정값이 되지 않는다.
 
