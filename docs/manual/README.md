@@ -201,7 +201,7 @@ Compare/Split 결과(표, 변형 레이어)는 위 입력을 바꾸거나 **Prev
 
 1. 트리에서 최종 volume을 누르면 Volume 탭에서 열린다. 머리글에 파일, 크기,
    dtype, tag, bin, center, tilt가 나온다. Slices 페이지에는 z slice, xz, yz
-   단면이 있고, 노란 십자가 세 단면의 교차점이다. 초록 글은 시야(FOV) 분석이다
+   단면과 그 아래 focus 그래프가 있고, 노란 십자가 세 단면의 교차점이다. 초록 글은 시야(FOV) 분석이다
    (`every projection saw a disk of up to 504 px; its whole disk on slices
    184-906 (the cyan lines)`). 청록 선이 그 범위다.
 

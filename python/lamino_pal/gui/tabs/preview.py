@@ -56,14 +56,15 @@ class PreviewTab(Tab):
         self.cnr.setSelectionMode(qt.QAbstractItemView.SingleSelection)
         self.cnr.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
         self.cnr.itemSelectionChanged.connect(self._variant)
-        self.cnr.hide()
         self.frc = self.graph("FRC", "cycles per pixel", "FRC")
-        self.frc.hide()
+        self._split = qt.QSplitter(qt.Qt.Vertical, childrenCollapsible=False)
+        for w in (self.view, self.cnr, self.frc):
+            self._split.addWidget(w)
+        self._split.setStretchFactor(0, 1)
+        self._result(None)
         layout = qt.QVBoxLayout(self)
         layout.addWidget(self.info)
-        layout.addWidget(self.view, 1)
-        layout.addWidget(self.cnr)
-        layout.addWidget(self.frc)
+        layout.addWidget(self._split, 1)
 
         rec = self.section("Recipe (blank: the project's)")
         self.combos: dict[str, qt.QComboBox] = {}
@@ -181,10 +182,20 @@ class PreviewTab(Tab):
         self._filled = None
         self.info.setText(msg)
 
+    def _result(self, shown: qt.QWidget | None) -> None:
+        """Show the CNR table or the FRC graph under the view, or neither. It
+        gets its size hint up to half the height and the view the rest; left
+        to the splitter, a child shown later takes all but the view's minimum."""
+        for w in (self.cnr, self.frc):
+            w.setVisible(w is shown)
+        if shown is not None:
+            room = self._split.height() - self._split.handleWidth()
+            h = min(shown.sizeHint().height(), room // 2)
+            self._split.setSizes([room - h] + [h if w is shown else 0 for w in (self.cnr, self.frc)])
+
     def _show(self, r: Result) -> None:
         a = r.arrays
-        self.cnr.hide()
-        self.frc.hide()
+        self._result(None)
         for name in [lay.name for lay in self.view.model.layers if lay.name.startswith(("v", "half"))]:
             self.view.model.layers.remove(name)
         planes(self.view, a["slice"], a["xz"], a["yz"], r.window)
@@ -262,7 +273,6 @@ class PreviewTab(Tab):
         p = self._params() if self.win.tag is not None else None
         self._filled = None if p is None else self._inputs(p)
         if st.op == "recon.compare":
-            self.frc.hide()
             vs = r["variants"]
             self.cnr.setRowCount(len(vs))
             for row, v in enumerate(vs):
@@ -272,18 +282,17 @@ class PreviewTab(Tab):
                 for col, text in enumerate(cells):
                     self.cnr.setItem(row, col, qt.QTableWidgetItem(text))
             self.cnr.resizeColumnsToContents()
-            self.cnr.show()
+            self._result(self.cnr)
             self.info.setText(f"job {st.id}: {len(vs)} variants at z {r['at'][0]}, xz at y {r['at'][1]}; pick a row")
             self.cnr.selectRow(0)
             self._variant()
         else:
-            self.cnr.hide()
             self.frc.clear()
             f = a["frc"]
             n = len(f)
             self.frc.addCurve(np.arange(n) / (2 * n), f, legend="FRC", color="black")
             self.frc.addYMarker(1 / 7, legend="1/7", text="1/7", color="gray")
-            self.frc.show()
+            self._result(self.frc)
             for i, half in enumerate(("even", "odd")):
                 w = (float(np.percentile(a["slice"][i], 0.5)), float(np.percentile(a["slice"][i], 99.5)))
                 self.view.replace(f"half {half}", a["slice"][i], contrast_limits=w, colormap="gray", visible=i == 0)

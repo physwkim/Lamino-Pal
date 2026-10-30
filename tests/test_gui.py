@@ -506,7 +506,7 @@ def test_a_graph_at_the_windows_least_size_draws_all_its_text_and_a_plot(app, wi
         et.mips[k].addImage(rng.random(shape, dtype="f4"), legend="mip", resetzoom=True)
     pt = win.tabs["Preview"]
     pt.frc.addCurve(np.arange(256) / 512, np.linspace(1, 0, 256), legend="FRC")
-    pt.frc.show()
+    pt._result(pt.frc)
     for tab in win.tabs.values():
         win.show_tab(tab.NAME)
         pump(app, 0.2)
@@ -920,6 +920,26 @@ def test_a_viewers_docks_leave_the_window_its_size(app, win):
         win.show_tab(name)
         pump(app, 0.2)
         assert (win.width(), win.height()) == (1600, 1000), name
+
+
+def test_a_preview_result_and_the_focus_plot_leave_the_views_their_height(app, win):
+    win.resize(1600, 1000)
+    pt, vt = win.tabs["Preview"], win.tabs["Volume"]
+    win.show_tab("Preview")
+    pump(app, 0.2)
+    pt.frc.addCurve(np.arange(256) / 512, np.linspace(1, 0, 256), legend="FRC")
+    pt._result(pt.frc)
+    pump(app, 0.2)
+    h = pt.frc.height()
+    assert pt.view.height() >= h >= pt.frc.minimumHeight()
+    win.resize(1600, 1200)
+    pump(app, 0.2)
+    assert pt.frc.height() == h
+    # The focus plot is on the Slices page, not under the 3D view.
+    win._select("volume", "v.h5")
+    vt.pages.setCurrentIndex(1)
+    pump(app, 0.2)
+    assert vt.view3d.height() > 0.8 * vt.height()
 
 
 def test_the_right_columns_docks_show_their_contents_whole_and_the_layer_list_the_rest(app, win):

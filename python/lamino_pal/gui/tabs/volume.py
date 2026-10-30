@@ -85,18 +85,19 @@ class VolumeTab(Tab):
         slices.addWidget(self.views["z"])
         slices.addWidget(aux)
         slices.setSizes([700, 500])
+        # The focus plot is read with the planes; the 3D view takes its page whole.
+        page = qt.QSplitter(qt.Qt.Vertical)
+        page.addWidget(slices)
+        page.addWidget(self.plot)
+        page.setSizes([750, 200])
         self.pages = qt.QTabWidget()
-        self.pages.addTab(slices, "Slices")
+        self.pages.addTab(page, "Slices")
         self.pages.addTab(self.view3d, "3D")
         self.pages.currentChanged.connect(self._page)
-        split = qt.QSplitter(qt.Qt.Vertical)
-        split.addWidget(self.pages)
-        split.addWidget(self.plot)
-        split.setSizes([750, 200])
         layout = qt.QVBoxLayout(self)
         layout.addWidget(self.info)
         layout.addWidget(self.fov)
-        layout.addWidget(split, 1)
+        layout.addWidget(self.pages, 1)
         self.path: Path | None = None
         self.shape: tuple[int, int, int] | None = None
         self.at = [0, 0, 0]  # (z, y, x) the three planes cross at
