@@ -73,6 +73,41 @@ class _Canvas(VispyCanvas):
     def _update_scenegraph(self, event=None) -> None:
         self._owed.start()
 
+    def add_layer_visual_mapping(self, napari_layer, vispy_layer) -> None:
+        # Owed before napari makes the layer's overlays, then left to the rebuild.
+        self._owed.start()
+        super().add_layer_visual_mapping(napari_layer, vispy_layer)
+
+    def _update_layer_overlays(self, layer) -> None:
+        # An owed rebuild remakes every layer's overlays.
+        if not self._owed.isActive():
+            super()._update_layer_overlays(layer)
+
+    # An overlay's visual is made only as it is shown. napari makes one for
+    # each, all hidden by default: a layer's four, 0.12 s, and the axes in
+    # every grid view.
+
+    def _add_layer_overlay(self, layer, overlay, parent) -> None:
+        if overlay.visible:
+            super()._add_layer_overlay(layer, overlay, parent)
+        else:
+            overlay.events.visible.connect(self._shown)
+
+    def _add_viewer_overlay(self, overlay, parent) -> None:
+        if overlay.visible:
+            super()._add_viewer_overlay(overlay, parent)
+        else:
+            overlay.events.visible.connect(self._shown)
+
+    def _shown(self, event) -> None:
+        overlay = event.source
+        overlay.events.visible.disconnect(self._shown)
+        if any(o is overlay for o in self.viewer._overlays.values()):
+            self._update_viewer_overlays()
+        for layer in self.layer_to_visual:
+            if any(o is overlay for o in layer._overlays.values()):
+                self._update_layer_overlays(layer)
+
     def _remove_layer(self, event) -> None:
         # napari's, but for its gc.collect and context.finish (0.3 s), which
         # free the layer's GL objects before the rebuild: left to it, once.

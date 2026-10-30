@@ -19,6 +19,8 @@ import PySide6.QtCore  # noqa: F401  # silx takes the binding napari's qtpy is p
 import pytest
 from conftest import band_at, pump
 from napari._vispy.canvas import VispyCanvas
+from napari._vispy.utils.visual import create_vispy_overlay
+from napari.layers import Image
 from silx.gui import qt
 from silx.gui.plot.items import Shape
 from test_recon import _scan
@@ -505,6 +507,38 @@ def test_a_canvas_rebuilds_its_scene_once_for_the_layers_changed_in_one_pass(app
     v.close()
     # The grid's at once, the layers' once each pass.
     assert built == [0, 5, "gc", 0]
+
+
+def test_an_overlays_visual_is_made_once_a_pass_and_only_while_it_is_shown(app, monkeypatch):
+    # napari makes every layer's four, hidden, as it maps the layer and again
+    # as it rebuilds the scene: half of a sweep's 27 s.
+    made = []
+
+    def counted(overlay, **kwargs):
+        made.append(type(overlay).__name__)
+        return create_vispy_overlay(overlay, **kwargs)
+
+    monkeypatch.setattr("napari._vispy.canvas.create_vispy_overlay", counted)
+    v = Viewer("t")
+    v.show()
+    v.model.grid.enabled = True
+    boxed = Image(np.zeros((4, 4), "f4"), name="boxed")
+    boxed._overlays["bounding_box"].visible = True
+    v.model.layers.extend([Image(np.zeros((4, 4), "f4"), name="c 0"), boxed])
+    pump(app, 0.1)
+    assert made == ["BoundingBoxOverlay"]
+    made.clear()
+    scale_bar, colorbar = v.model._overlays["scale_bar"], v.model.layers["c 0"]._overlays["colorbar"]
+    scale_bar.visible = colorbar.visible = True
+    pump(app, 0.1)
+    canvas = v.qt_viewer.canvas
+    try:
+        assert sorted(made) == ["ColorBarOverlay", "ScaleBarOverlay"]
+        assert canvas._overlay_to_visual[scale_bar][0].node.visible
+        assert canvas._layer_overlay_to_visual[v.model.layers["c 0"]][colorbar].node.visible
+    finally:
+        v.close_canvas()
+        v.close()
 
 
 def test_a_layer_added_as_its_grid_is_turned_on_is_drawn_in_it(app):
