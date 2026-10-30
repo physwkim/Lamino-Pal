@@ -45,8 +45,8 @@ class _Canvas(VispyCanvas):
     reset_view) is to the layers, their grid and the size the canvas then
     had, napari's default 800×600 before it was made, so it is made again as
     the canvas is resized or its scene rebuilt until the camera is set by
-    hand: by the mouse or a touch on the canvas, or by keep. Not until it is
-    drawn: Qt may draw it between the layers added in one pass."""
+    hand: moved other than by a fit, or by keep. Not until it is drawn: Qt
+    may draw it between the layers added in one pass."""
 
     _unfit = False
 
@@ -64,10 +64,12 @@ class _Canvas(VispyCanvas):
         # A layer was removed since the last rebuild.
         self._closed = False
         self._unfit = True
-        self.viewer.events.reset_view.connect(self._fitted)
-        events = self._scene_canvas.events
-        for e in (events.mouse_press, events.mouse_wheel, events.touch):
+        # A fit moves the camera, then emits reset_view. A press that leaves
+        # the camera, a click on a plane or a shape drawn, is no setting.
+        cam = self.viewer.camera.events
+        for e in (cam.zoom, cam.center, cam.angles):
             e.connect(self.keep)
+        self.viewer.events.reset_view.connect(self._fitted)
 
     def _fitted(self, event=None) -> None:
         self._unfit = True
