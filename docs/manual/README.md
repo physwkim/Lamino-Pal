@@ -32,13 +32,11 @@ lamino-pal-gui --project ~/work/lamino_pal_demo/project.toml
 - **오른쪽 Parameters**: 현재 탭의 입력과 버튼. 이미지 viewer가 있는 탭에서는
   그 아래에 napari의 **layer controls**(선택한 레이어의 도구·contrast·색)와
   **layer list**(레이어 목록, 눈 아이콘으로 표시/숨김, 맨 아래 줄 오른쪽 집
-  아이콘이 Reset view)가 붙는다.
-- **아래 Jobs / Log**: GPU 작업의 진행률·남은 시간·GPU·메시지. 작업을 고르고
-  **Cancel selected**로 취소한다. Log 탭은 실행한 op의 기록이다.
-
-> 주의: viewer가 처음 나타날 때마다 layer controls/list가 붙으면서 창
-> 높이가 커진다(이번 검증에서 1000 → 1313 → 1344 → 1365 px). 창이 화면을
-> 넘으면 창 크기를 직접 줄인다.
+  아이콘이 Reset view)가 붙는다. 이 오른쪽 열은 창 높이 전체를 쓰고, 각 칸은
+  내용만큼 높이를 받으며 남는 높이는 layer list가 갖는다. 창이 낮아 모자라면
+  칸 안에서 스크롤된다.
+- **아래 Jobs / Log**: 탭 아래에 있다. GPU 작업의 진행률·남은 시간·GPU·메시지.
+  작업을 고르고 **Cancel selected**로 취소한다. Log 탭은 실행한 op의 기록이다.
 
 ## 1. Data: 스캔 가져오기와 group 지정
 

@@ -47,6 +47,42 @@ def _hangul_in_graphs() -> None:
     rcParams["font.family"] = ["sans-serif", *(f for f in fams if f in known)]
 
 
+class _Scroll(qt.QScrollArea):
+    """`widget` in a dock of the right column, its height scrolled once the
+    window is too short for it: the column's docks, each as tall as its
+    widget, would make the window grow. Asks for the widget's whole height,
+    not a scroll area's 24 lines at most."""
+
+    # The widget asks for another size.
+    asked = qt.Signal()
+
+    def __init__(self, widget: qt.QWidget):
+        super().__init__(widgetResizable=True, frameShape=qt.QFrame.NoFrame)
+        self.setHorizontalScrollBarPolicy(qt.Qt.ScrollBarAlwaysOff)
+        self.setWidget(widget)
+
+    def sizeHint(self) -> qt.QSize:
+        return self.widget().sizeHint() + qt.QSize(self.verticalScrollBar().sizeHint().width(), 0)
+
+    def minimumSizeHint(self) -> qt.QSize:
+        w = self.widget().minimumSizeHint().width() + self.verticalScrollBar().sizeHint().width()
+        return qt.QSize(w, super().minimumSizeHint().height())
+
+    def want(self) -> int:
+        """Its height showing the widget whole at the width it is given: a
+        wrapped label is taller than at its hint's width."""
+        w = self.widget()
+        h = w.heightForWidth(self.viewport().width()) if w.hasHeightForWidth() else w.sizeHint().height()
+        # A style's frame, as napari's.
+        return h + self.height() - self.viewport().height()
+
+    def eventFilter(self, obj: qt.QObject, event: qt.QEvent) -> bool:
+        # Filtering its widget's events already.
+        if obj is self.widget() and event.type() == qt.QEvent.LayoutRequest:
+            self.asked.emit()
+        return super().eventFilter(obj, event)
+
+
 class MainWindow(qt.QMainWindow):
     # The group, scan or volume in view changed.
     context_changed = qt.Signal()
@@ -70,16 +106,24 @@ class MainWindow(qt.QMainWindow):
         self.jobs.ended.connect(self._job_ended)
         self.layoutLog.addWidget(LogWidget(project))
         self.tabifyDockWidget(self.dockJobs, self.dockLog)
+        # The right column the window's height, the jobs under the tabs only.
+        self.setCorner(qt.Qt.BottomRightCorner, qt.Qt.RightDockWidgetArea)
         self.dockJobs.raise_()
 
         self.tree = ProjectTree(self.treeProject, project)
         self.tree.selected.connect(self._select)
+        # The viewers' layer lists, which take what the column has left.
+        self._lists: set[qt.QDockWidget] = set()
+        # Once the pages, docks and contents changed in one pass are.
+        self._fit = qt.QTimer(self, singleShot=True, interval=0)
+        self._fit.timeout.connect(self._fit_column)
         self.tabs = {}
         for cls in TABS:
             tab = cls(self)
             self.tabs[cls.NAME] = tab
             getattr(self, f"layout{cls.NAME}").addWidget(tab)
-            self.stackParams.addWidget(tab.controls)
+            # Each its own: a stack is as tall as its tallest page.
+            self.stackParams.addWidget(self._scroll(tab.controls))
         self.tabWidget.currentChanged.connect(self._tab_changed)
         self.splitterMain.setSizes([260, 1340])
 
@@ -179,16 +223,47 @@ class MainWindow(qt.QMainWindow):
 
     def _tab_changed(self, i: int) -> None:
         self.stackParams.setCurrentIndex(i)
+        self._fit.start()
+
+    def _fit_column(self) -> None:
+        """The right column's docks as tall as their contents ask, the layer
+        list what is left: Qt keeps a dock's height across pages and takes a
+        shortfall from every dock alike."""
+        self.layout().activate()
+        docks = [
+            d for d in self.findChildren(qt.QDockWidget)
+            if d.isVisible() and self.dockWidgetArea(d) == qt.Qt.RightDockWidgetArea
+        ]
+        lists = [d for d in docks if d in self._lists]
+        if not lists:
+            return
+        want = {}
+        for d in docks:
+            if d not in self._lists:
+                # The page shown, not the stack's tallest.
+                scroll = self.stackParams.currentWidget() if d is self.dockParams else d.widget()
+                want[d] = max(d.height() - scroll.height() + scroll.want(), d.minimumSizeHint().height())
+        left = sum(d.height() for d in docks) - sum(want.values())
+        for d in lists:
+            want[d] = max(left // len(lists), d.minimumSizeHint().height())
+        self.resizeDocks(list(want), list(want.values()), qt.Qt.Vertical)
+
+    def _scroll(self, widget: qt.QWidget) -> _Scroll:
+        scroll = _Scroll(widget)
+        scroll.asked.connect(self._fit.start)
+        return scroll
 
     def attach_docks(self, v, qv) -> None:
         """Viewer `v`'s QtViewer `qv`'s layer controls and list beside the
         parameters, shown while `v` is: a tab or page hides it."""
         docks = (qv.dockLayerControls, qv.dockLayerList)
         for dock in docks:
+            dock.setWidget(self._scroll(dock.widget()))
             self.addDockWidget(qt.Qt.RightDockWidgetArea, dock)
             # Made before it is shown, or as it is: its show follows.
             dock.hide()
-        v.shown.connect(lambda on: [d.setVisible(on) for d in docks])
+        self._lists.add(qv.dockLayerList)
+        v.shown.connect(lambda on: [*(d.setVisible(on) for d in docks), self._fit.start()])
 
     def _job_ended(self, st: JobState) -> None:
         if st.status == "failed":

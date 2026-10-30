@@ -811,6 +811,27 @@ def docks(v):
     return [d.isVisible() for d in (v.qt_viewer.dockLayerControls, v.qt_viewer.dockLayerList)]
 
 
+def test_a_viewers_docks_leave_the_window_its_size(app, win):
+    win.resize(1600, 1000)
+    pump(app, 0.2)
+    for name in ("Raw", "Align", "Preview", "Volume", "Batch"):
+        win.show_tab(name)
+        pump(app, 0.2)
+        assert (win.width(), win.height()) == (1600, 1000), name
+
+
+def test_the_right_columns_docks_show_their_contents_whole_and_the_layer_list_the_rest(app, win):
+    win.resize(1600, 1000)
+    win.tabs["Raw"].view.replace("img", np.zeros((8, 8), "f4"))
+    for name in ("Raw", "Align", "Preview", "Volume", "Raw"):
+        win.show_tab(name)
+        pump(app, 0.3)
+        assert win.stackParams.currentWidget().verticalScrollBar().maximum() == 0, name
+    qv = win.tabs["Raw"].view.qt_viewer
+    assert qv.dockLayerControls.widget().verticalScrollBar().maximum() == 0
+    assert qv.dockLayerList.height() > qv.dockLayerList.minimumSizeHint().height()
+
+
 def test_a_viewer_makes_its_canvas_when_first_shown_and_shows_its_docks_while_it_is(app, win):
     at, vt = win.tabs["Align"], win.tabs["Volume"]
     assert not any(v._qt_viewer for t in win.tabs.values() for v in t.viewers)
