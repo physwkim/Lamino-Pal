@@ -37,7 +37,7 @@ class AlignTab(Tab):
     def __init__(self, win):
         super().__init__(win)
         self.view = self.viewer("align")
-        self.plot = self.graph("focus")
+        self.plot = self.graph("focus", "center px (full resolution)", "focus")
         self.plot.sigPlotSignal.connect(self._clicked)
         self.view.model.mouse_drag_callbacks.append(self._press)
         self.view.model.dims.events.current_step.connect(self._stepped)
@@ -299,7 +299,6 @@ class AlignTab(Tab):
             self.plot.addXMarker(x.center_px, legend=f"rival {x.index}", color="orange")
         self.plot.setGraphTitle(", ".join(["best (green)", *(["rivals (orange)"] if v.rivals else []), PICKED]))
         self.plot.getXAxis().setLabel("center px (full resolution)")
-        self.plot.getYAxis().setLabel("focus")
         head = f"{v.kind}: center {v.center_px:.2f} px on slice {r.slice} at tilt {r.tilt_deg:g}°"
         head += f" (center from {r.center_from})"
         if v.kind == "resolved":

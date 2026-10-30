@@ -57,7 +57,7 @@ class PreviewTab(Tab):
         self.cnr.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
         self.cnr.itemSelectionChanged.connect(self._variant)
         self.cnr.hide()
-        self.frc = self.graph("FRC")
+        self.frc = self.graph("FRC", "cycles per pixel", "FRC")
         self.frc.hide()
         layout = qt.QVBoxLayout(self)
         layout.addWidget(self.info)
@@ -283,7 +283,6 @@ class PreviewTab(Tab):
             n = len(f)
             self.frc.addCurve(np.arange(n) / (2 * n), f, legend="FRC", color="black")
             self.frc.addYMarker(1 / 7, legend="1/7", text="1/7", color="gray")
-            self.frc.getXAxis().setLabel("cycles per pixel")
             self.frc.show()
             for i, half in enumerate(("even", "odd")):
                 w = (float(np.percentile(a["slice"][i], 0.5)), float(np.percentile(a["slice"][i], 99.5)))

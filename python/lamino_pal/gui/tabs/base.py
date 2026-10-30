@@ -90,9 +90,11 @@ class Tab(qt.QWidget):
         self.viewers.append(v)
         return v
 
-    def graph(self, title: str, cls: type[PlotWidget] = Plot1D) -> PlotWidget:
-        """A graph of this tab, named `title` to an agent."""
+    def graph(self, title: str, x: str, y: str, cls: type[PlotWidget] = Plot1D) -> PlotWidget:
+        """A graph of this tab with axes `x` and `y`, named `title` to an agent."""
         p = cls()
+        p.getXAxis().setLabel(x)
+        p.getYAxis().setLabel(y)
         p.setMinimumSize(*GRAPH_SIZE)
         self.graphs[title] = p
         return p

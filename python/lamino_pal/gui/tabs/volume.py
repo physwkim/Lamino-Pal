@@ -61,7 +61,7 @@ class VolumeTab(Tab):
         self.view3d.model.dims.ndisplay = 3
         self.info = qt.QLabel(wordWrap=True)
         self.fov = qt.QLabel(wordWrap=True)
-        self.plot = self.graph("focus by z")
+        self.plot = self.graph("focus by z", "slice z", "focus (mean |∇|²)")
         self.plot.sigPlotSignal.connect(self._marker_moved)
         aux = qt.QSplitter(qt.Qt.Vertical)
         aux.addWidget(self.views["y"])
@@ -271,8 +271,6 @@ class VolumeTab(Tab):
         z = np.arange(len(f)) * r.step
         self.plot.addCurve(z, f, legend="focus", color="black")
         self.plot.addXMarker(r.peak_z, legend="peak", color="gray")
-        self.plot.getXAxis().setLabel("slice z")
-        self.plot.getYAxis().setLabel("focus (mean |∇|²)")
         if r.band is not None:
             self.z0.setValue(r.band[0])
             self.z1.setValue(r.band[1])

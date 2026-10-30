@@ -28,13 +28,11 @@ class ExportTab(Tab):
     def __init__(self, win):
         super().__init__(win)
         self.info = qt.QLabel(wordWrap=True)
-        self.hist = self.graph("histogram")
-        self.hist.getXAxis().setLabel("value")
-        self.hist.getYAxis().setLabel("voxels")
+        self.hist = self.graph("histogram", "value", "voxels")
         self.mips = {}
         row = qt.QSplitter(qt.Qt.Horizontal)
         for k, title in MIPS:
-            p = self.graph(f"MIP {k}", Plot2D)
+            p = self.graph(f"MIP {k}", "Columns", "Rows", Plot2D)
             p.setGraphTitle(f"MIP {title}")
             p.setKeepDataAspectRatio(True)
             p.setYAxisInverted(True)

@@ -466,6 +466,13 @@ def test_a_graphs_markers_are_named_in_its_title_not_on_the_plot_where_close_one
     )
 
 
+def test_every_graph_names_its_axes_before_its_first_result(win):
+    for tab in win.tabs.values():
+        for name, g in tab.graphs.items():
+            # silx's own names for a Plot1D's axes.
+            assert g.getXAxis().getLabel() != "X" and g.getYAxis().getLabel() != "Y", name
+
+
 def test_a_graph_at_the_windows_least_size_draws_all_its_text_and_a_plot(app, win):
     from lamino_pal.gui.tabs.align import PICKED, TILT_FOCUS
     from lamino_pal.ops.export import WindowResult
