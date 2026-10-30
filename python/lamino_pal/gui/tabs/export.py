@@ -28,6 +28,8 @@ class ExportTab(Tab):
     def __init__(self, win):
         super().__init__(win)
         self.info = qt.QLabel(wordWrap=True)
+        # What the last export job wrote; the line above is the volume's alone.
+        self.exported = qt.QLabel(wordWrap=True)
         self.hist = self.graph("histogram", "value", "voxels")
         self.mips = {}
         row = qt.QSplitter(qt.Qt.Horizontal)
@@ -44,6 +46,7 @@ class ExportTab(Tab):
         split.setSizes([250, 650])
         layout = qt.QVBoxLayout(self)
         layout.addWidget(self.info)
+        layout.addWidget(self.exported)
         layout.addWidget(split, 1)
         self._vol: str | None = None
         self._z: tuple | None = None  # the default z range last set, with its reason
@@ -63,6 +66,7 @@ class ExportTab(Tab):
         if self.win.volume != self._vol:
             self._vol = self.win.volume
             self._z = None
+            self.exported.clear()
             self.hist.clear()
             for p in self.mips.values():
                 p.clear()
@@ -141,9 +145,9 @@ class ExportTab(Tab):
             for k, p in self.mips.items():
                 lo, hi = window(a[k])
                 p.addImage(a[k], legend="mip", colormap=Colormap("gray", vmin=lo, vmax=hi), resetzoom=True)
-            self.info.setText(f"job {st.id}: MIPs of slices [{r['z'][0]}, {r['z'][1]}) in {out}")
+            self.exported.setText(f"job {st.id}: MIPs of slices [{r['z'][0]}, {r['z'][1]}) in {out}")
         elif st.op == "export.tiff16":
             w = r["window"]
-            self.info.setText(f"job {st.id}: {out}, {r['shape'][0]} slices, window [{w[0]:.4g}, {w[1]:.4g}]")
+            self.exported.setText(f"job {st.id}: {out}, {r['shape'][0]} slices, window [{w[0]:.4g}, {w[1]:.4g}]")
         elif st.op == "export.bin":
-            self.info.setText(f"job {st.id}: {out}, {'×'.join(map(str, r['shape']))}")
+            self.exported.setText(f"job {st.id}: {out}, {'×'.join(map(str, r['shape']))}")

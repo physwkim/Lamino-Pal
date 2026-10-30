@@ -704,6 +704,20 @@ def test_the_export_slices_follow_the_band_and_keep_a_hand_edit(app, win):
     assert (ex.z0.value(), ex.z1.value()) == (5, 21)
 
 
+def test_an_export_job_leaves_the_header_naming_the_volume(app, win):
+    win._select("volume", "v.h5")
+    ex = win.tabs["Export"]
+    head = ex.info.text()
+    assert head.startswith("<b>v.h5</b>")
+    ended = []
+    win.jobs.ended.connect(ended.append)
+    ex.export("export.mip")
+    assert pump(app, 60, lambda: ended) and ended[0].status == "done"
+    pump(app, 0.1)
+    assert ex.info.text() == head
+    assert ex.exported.text().startswith(f"job {ended[0].id}: MIPs of slices")
+
+
 def test_the_volume_tab_shows_the_band_carried_to_the_volumes_tilt(app, win):
     (win.project.work_dir / "fig.png").write_bytes(b"")
     d20, d30 = _core.lamino_depth(32, 20.0), _core.lamino_depth(32, 30.0)

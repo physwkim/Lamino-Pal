@@ -245,8 +245,8 @@ Compare/Split 결과(표, 변형 레이어)는 위 입력을 바꾸거나 **Prev
    ![MIP](30-mip.png)
 
 4. **16-bit TIFF**는 그 범위를 window로 16-bit BigTIFF
-   `<stem>_z<z0>-<z1>_16bit.tif`에 쓴다(작업). 끝나면 머리글에 파일, slice 수,
-   window가 나온다.
+   `<stem>_z<z0>-<z1>_16bit.tif`에 쓴다(작업). 끝나면 volume을 적은 머리글 아래
+   줄에 작업, 파일, slice 수, window가 나온다. MIP와 Bin도 같은 줄에 나온다.
 
    ![TIFF](31-tiff.png)
 
