@@ -62,6 +62,7 @@ def _hold_plot(p: PlotWidget, e: DrawEvent) -> None:
 def _blank(p: PlotWidget, clear: Callable[[], None], empty: str) -> None:
     clear()
     p.setGraphTitle(empty)
+    p.resetZoom()
 
 
 def badge(label: qt.QLabel, text: str, color: str | None = None) -> None:
@@ -145,7 +146,7 @@ class Tab(qt.QWidget):
         b.ax.title.set_wrap(True)
         b.ax.title._get_wrap_line_width = partial(_wrap_width, b.ax.title)
         b.mpl_connect("draw_event", partial(_hold_plot, p))
-        # silx's clear keeps the title, of a result no longer shown.
+        # silx's clear keeps the title and limits, of a result no longer shown.
         p.clear = partial(_blank, p, p.clear, empty)
         p.clear()
         self.graphs[title] = p

@@ -796,6 +796,24 @@ def test_a_graph_shown_empty_names_the_button_that_draws_it(app, win):
                 assert any(b in p.getGraphTitle() for b in buttons), (tab.NAME, name, p.getGraphTitle())
 
 
+def test_a_graph_cleared_shows_the_range_it_was_made_with(app, win):
+    """silx's clear keeps the last result's limits, and with them its ×10ⁿ."""
+    from lamino_pal.ops.export import WindowResult
+
+    def limits():
+        return {(t, n): (p.getXAxis().getLimits(), p.getYAxis().getLimits()) for t, tab in win.tabs.items()
+                for n, p in tab.graphs.items()}
+
+    made = limits()
+    win._select("volume", "v.h5")
+    r = FocusResult(shape=(150, 8, 8), step=1, peak_z=70, band=(70, 149), air=[(30, 69)], wrap=(0, 29))
+    win.tabs["Volume"]._show_focus(r.with_arrays(focus=np.full(150, 1e-7)))
+    win.tabs["Export"]._show_window(WindowResult(z=(0, 8), window=(0.1, 0.9), span=(0.0, 1.0), hist=[1, 2, 3]))
+    assert limits() != made
+    win.set_context(volume=None)
+    assert limits() == made
+
+
 @pytest.mark.parametrize("ndisplay, grid", [(2, True), (3, False)])
 def test_a_canvas_made_over_layers_is_the_one_that_heard_them_inserted(app, ndisplay, grid):
     data = np.random.default_rng(0).random((3, 4, 8, 8), dtype="f4")
