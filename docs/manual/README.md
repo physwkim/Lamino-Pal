@@ -136,7 +136,8 @@ tilt가 붙는다. 아래 그래프는 tilt별 focus다. 타일이나 그래프�
 
 ## 4. Preview: 레시피 확인과 품질 비교
 
-1. Preview 탭을 열면 현재 문맥으로 미리보기가 자동으로 돈다. 위 글줄에 쓴
+1. Preview 탭을 열면 현재 문맥으로 미리보기가 돈다(지난번 뒤 입력이 바뀌었을
+   때만). 위 글줄에 쓴
    중심·tilt·slice 위치·레시피가 나오고, z·y·x 세 단면이 격자로 나온다.
 
    ![미리보기](15-preview.png)
@@ -149,7 +150,7 @@ tilt가 붙는다. 아래 그래프는 tilt별 focus다. 타일이나 그래프�
 2. Parameters에서 **Recipe**(비우면 프로젝트 레시피: algorithm, filter_name,
    remove_stripe_method, retrieve_phase_method, more fields에 JSON),
    **Geometry**(비우면 group의 center px, tilt °), **Planes**(z 슬라이더, y,
-   x)를 바꾸고 **Preview**를 누르면 다시 계산한다.
+   x)를 바꾸면 다시 계산한다. **Preview**는 입력이 같아도 다시 계산한다.
 3. CNR을 재려면 **Add ROI layer**를 누른다. 아래 상태 막대에 "draw the signal
    rectangle first, the background second"가 나온다. layer controls의 사각형
    도구로 z 단면 위에 신호 영역을 먼저, 배경 영역을 그다음에 그린다.
@@ -180,11 +181,10 @@ tilt가 붙는다. 아래 그래프는 tilt별 focus다. 타일이나 그래프�
 
    ![FRC](19-frc.png)
 
-> 주의: Compare/Split 결과(표, 변형 레이어)는 오래 남지 않는다. 프로젝트
-> 폴더가 바뀔 때마다(그 작업이 결과 파일을 쓰는 것 포함) 그리고 Preview 탭이
-> 다시 보일 때마다 미리보기가 다시 돌아 결과를 덮는다. 트리의 Artifacts에서
-> 결과 파일을 다시 눌러도 같은 이유로 덮인다. 표가 뜨면 바로 읽어 둔다.
->
+Compare/Split 결과(표, 변형 레이어)는 위 입력을 바꾸거나 **Preview**를 누를
+때까지 남는다. 트리의 Artifacts에서 결과 파일(`<tag>_recipes_…`,
+`<tag>_split_…`)을 누르면 다시 보인다.
+
 > 주의: Compare 뒤에는 변형 레이어가 ROI 레이어 위에 놓여 ROI 사각형이 가려진다.
 
 ## 5. Batch: 최종 volume 재구성

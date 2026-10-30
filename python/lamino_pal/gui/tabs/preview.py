@@ -99,7 +99,7 @@ class PreviewTab(Tab):
         at.addRow(self.zl, self.z)
         at.addRow("y", self.y)
         at.addRow("x", self.x)
-        at.addRow(button("Preview", self.preview))
+        at.addRow(button("Preview", lambda: self.preview(again=True)))
         cmp_ = self.section("Compare recipes (job)")
         self.variants = qt.QPlainTextEdit()
         self.variants.setPlaceholderText("one JSON object per line laid over the recipe; blank: the defaults")
@@ -109,6 +109,8 @@ class PreviewTab(Tab):
         cmp_.addRow(button("Compare", self.compare))
         cmp_.addRow(button("Even/odd split", self.split, "the slice from each half of the projections (job)"))
         self.panel.addStretch(1)
+        # The inputs, as `_inputs` keys them, when the view was last filled.
+        self._filled: str | None = None
 
     # Params ----------------------------------------------------------------
 
@@ -139,6 +141,20 @@ class PreviewTab(Tab):
             "y": None if self.y.value() < 0 else self.y.value(),
         }
 
+    def _params(self) -> dict | None:
+        p = self.setup()
+        if p is not None:
+            p.update(self._where(), x=None if self.x.value() < 0 else self.x.value())
+        return p
+
+    def _inputs(self, p: dict) -> str:
+        """Params `p` and what the op binds a blank one to: the group's center,
+        tilt and z band, and the scan's file."""
+        scan = self.project.data.find_scan(p["tag"])
+        g = next((g for g in self.project.data.group if g.name == scan.group), None)
+        bound = None if g is None else (g.center_px, g.tilt_deg, g.z_band and g.z_band.model_dump())
+        return json.dumps([p, scan.model_dump(), bound], sort_keys=True)
+
     def _z_moved(self, z: int) -> None:
         self._z_set = True
         self.zl.setText(f"z: {z}")
@@ -146,15 +162,25 @@ class PreviewTab(Tab):
 
     # Preview ---------------------------------------------------------------
 
-    def preview(self) -> None:
+    def preview(self, again: bool = False) -> None:
+        """The view filled by a preview, unless `again` is unset and the inputs
+        are those it was last filled on: a project change that leaves them is
+        not one, and a compare or split shown stays."""
         if not self.isVisible():
             return
-        p = self.setup()
+        p = self._params()
         if p is None:
             return
-        p.update(self._where(), x=None if self.x.value() < 0 else self.x.value())
+        key = self._inputs(p)
+        if key == self._filled and not again:
+            return
+        self._filled = key
         self.info.setText("reconstructing …")
-        self.run("recon.preview", p, self._show, channel="preview", failed=self.info.setText)
+        self.run("recon.preview", p, self._show, channel="preview", failed=self._failed)
+
+    def _failed(self, msg: str) -> None:
+        self._filled = None
+        self.info.setText(msg)
 
     def _show(self, r: Result) -> None:
         a = r.arrays
@@ -176,14 +202,14 @@ class PreviewTab(Tab):
         )
 
     def on_context(self) -> None:
+        self._z_set = False
+        self.on_project()
+
+    def on_project(self) -> None:
         g = self.win.find_group()
         self.center.setPlaceholderText("" if g is None or g.center_px is None else f"{g.center_px:.2f}")
         self.tilt.setPlaceholderText("20" if g is None or g.tilt_deg is None else f"{g.tilt_deg:g}")
-        self._z_set = False
         self.preview()
-
-    def on_project(self) -> None:
-        self.on_context()
 
     def showEvent(self, event: qt.QShowEvent) -> None:
         super().showEvent(event)
@@ -231,6 +257,9 @@ class PreviewTab(Tab):
         r = st.result
         self._job = st
         self._arrays = a
+        # Shown on the inputs as now set: a preview replaces it as they change.
+        p = self._params() if self.win.tag is not None else None
+        self._filled = None if p is None else self._inputs(p)
         if st.op == "recon.compare":
             self.frc.hide()
             vs = r["variants"]

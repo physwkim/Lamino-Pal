@@ -486,6 +486,44 @@ def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_under_its_slice(ap
     assert at.plot._getMarker("picked").getXPosition() == 21
 
 
+def test_a_preview_is_made_again_only_as_its_inputs_change_and_a_compare_shown_stays(app, win, monkeypatch):
+    pt = win.tabs["Preview"]
+    previews = []
+    run = pt.run
+    monkeypatch.setattr(pt, "run", lambda op, p, done, channel=None, failed=None: previews.append(failed))
+    win.set_context(tag="s")
+    win.show_tab("Preview")
+    pump(app, 0.2)
+    assert len(previews) == 1
+    # A project change leaving them, then the group's center a blank center px binds to.
+    win.on_project()
+    assert len(previews) == 1
+    win.project.commit(lambda f: setattr(f.group[0], "center_px", 65.0))
+    win.on_project()
+    assert len(previews) == 2
+    previews[-1]("refused")
+    pt.preview()
+    pt.preview(again=True)
+    assert len(previews) == 4
+
+    monkeypatch.setattr(pt, "run", run)
+    ended = []
+    win.jobs.ended.connect(ended.append)
+    pt.compare()
+    assert pump(app, 120, lambda: ended) and ended[0].status == "done"
+    assert not pt.cnr.isHidden() and "variant slice" in names(pt.view)
+    monkeypatch.setattr(pt, "run", lambda op, p, done, channel=None, failed=None: previews.append(failed))
+    # The job's own artifact, the tab hidden and shown, the artifact picked.
+    win.on_project()
+    win.show_tab("Raw")
+    win.show_tab("Preview")
+    pump(app, 0.2)
+    win._select("artifact", os.path.relpath(ended[0].result["artifacts"][0], win.project.work_dir))
+    pump(app, 0.2)
+    assert len(previews) == 4
+    assert not pt.cnr.isHidden() and "variant slice" in names(pt.view)
+
+
 def test_a_graph_draws_its_hangul_title_in_a_font_that_has_it(app, scene, monkeypatch):
     from lamino_pal.gui.tabs.align import TILT_FOCUS
     from lamino_pal.gui.window import MainWindow
