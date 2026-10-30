@@ -11,7 +11,7 @@ dependencies = ["numpy", "h5py", "pydantic>=2", "tomli-w", "tifffile", "mcp>=2.3
 
 [project.optional-dependencies]
 # The CLI and the MCP server run without Qt.
-gui = ["pyside6", "silx>=2.1", "napari>=0.6", "dask", "pyopengl"]
+gui = ["pyside6", "silx>=2.1", "napari==0.6.6", "dask", "pyopengl"]
 
 [project.scripts]
 lamino-pal = "lamino_pal.cli:main"
