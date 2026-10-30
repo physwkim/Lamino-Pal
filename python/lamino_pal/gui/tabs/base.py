@@ -140,6 +140,10 @@ class Tab(qt.QWidget):
         p.getXAxis().setLabel(x)
         p.getYAxis().setLabel(y)
         p.setMinimumSize(*GRAPH_SIZE)
+        if cls is Plot1D:
+            # matplotlib's margins: a curve's peak or end on the frame is
+            # hidden under it. An image fills its frame.
+            p.setDataMargins(0.05, 0.05, 0.05, 0.05)
         # Its title wrapped at draw time, so the layout and the drawing agree,
         # and its least height held to that drawing.
         b = p.getBackend()

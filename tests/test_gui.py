@@ -27,6 +27,7 @@ from napari._vispy.utils.visual import create_vispy_overlay
 from napari.layers import Image
 from PIL import Image as PILImage
 from silx.gui import qt
+from silx.gui.plot import Plot1D
 from silx.gui.plot.items import MarkerBase, Shape
 from test_recon import _scan
 from vispy.app.canvas import MouseEvent
@@ -499,6 +500,17 @@ def test_every_graph_names_its_axes_before_its_first_result(win):
         for name, g in tab.graphs.items():
             # silx's own names for a Plot1D's axes.
             assert g.getXAxis().getLabel() != "X" and g.getYAxis().getLabel() != "Y", name
+
+
+def test_a_curve_s_peaks_and_ends_sit_inside_its_graph_s_frame(win):
+    """On the frame, a peak or an end point is hidden under it."""
+    curves = [p for tab in win.tabs.values() for p in tab.graphs.values() if isinstance(p, Plot1D)]
+    assert len(curves) == 4
+    for p in curves:
+        p.addCurve([0, 1], [0, 1], legend="c")
+        (x0, x1), (y0, y1) = p.getXAxis().getLimits(), p.getYAxis().getLimits()
+        assert x0 < 0 < 1 < x1 and y0 < 0 < 1 < y1, p.getXAxis().getLabel()
+        p.clear()
 
 
 def test_a_graph_at_its_least_size_wraps_its_title_and_keeps_a_plot(app, win):
