@@ -91,7 +91,8 @@ class VolumeTab(Tab):
         self._syncing = False
         for axis, v in self.views.items():
             v.model.dims.events.current_step.connect(lambda e, axis=axis: self._stepped(axis))
-            v.model.mouse_double_click_callbacks.append(lambda m, ev, axis=axis: self._clicked(axis, ev))
+            # The cross's alone: napari's own zooms in.
+            v.model.mouse_double_click_callbacks[:] = [lambda m, ev, axis=axis: self._clicked(axis, ev)]
 
         band = self.section("z band")
         self.step = spin(1, 64, 4)

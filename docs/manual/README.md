@@ -215,9 +215,6 @@ Compare/Split 결과(표, 변형 레이어)는 위 입력을 바꾸거나 **Prev
 
    ![십자 이동](24-cross.png)
 
-   > 주의: 더블클릭은 그 viewer를 2배 확대하기도 한다(napari 기본 동작).
-   > 집 아이콘(Reset view)으로 되돌린다.
-
 3. z band: **every n-th slice**를 정하고 **Focus by z**를 누르면 slice별 focus
    그래프가 나오고 **first slice**, **last slice**가 채워진다. 값을 확인하거나
    고친 뒤 **Decide z band**를 누르면 그 범위(양 끝 포함)가 group의 z band가

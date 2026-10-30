@@ -572,6 +572,20 @@ def test_the_volume_planes_follow_one_slider_once_and_3d_shows_the_binned_volume
         assert vt.view3d.model.dims.ndisplay == n
 
 
+def test_a_double_click_on_a_volume_plane_moves_the_cross_and_not_the_camera(app, win):
+    win._select("volume", "v.h5")
+    win.show_tab("Volume")
+    pump(app, 0.2)
+    vt = win.tabs["Volume"]
+    view = vt.views["z"]
+    canvas = view.qt_viewer.canvas
+    cam = (view.model.camera.zoom, view.model.camera.center)
+    at = (canvas.view.transform * canvas.view.scene.transform).map([40, 20])[:2]
+    canvas._on_mouse_double_click(MouseEvent("mouse_double_click", pos=at, button=1))
+    assert vt.at[1:] == [20, 40]
+    assert (view.model.camera.zoom, view.model.camera.center) == cam
+
+
 def test_the_fov_disk_is_centered_on_the_z_slice(app, win):
     win._select("volume", "v.h5")
     vt = win.tabs["Volume"]
