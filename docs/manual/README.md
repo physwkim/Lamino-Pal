@@ -185,8 +185,6 @@ Compare/Split 결과(표, 변형 레이어)는 위 입력을 바꾸거나 **Prev
 때까지 남는다. 트리의 Artifacts에서 결과 파일(`<tag>_recipes_…`,
 `<tag>_split_…`)을 누르면 다시 보인다.
 
-> 주의: Compare 뒤에는 변형 레이어가 ROI 레이어 위에 놓여 ROI 사각형이 가려진다.
-
 ## 5. Batch: 최종 volume 재구성
 
 1. 위 머리글에 group과 적용될 레시피가 나온다. 표는 group의 scan마다 center px,

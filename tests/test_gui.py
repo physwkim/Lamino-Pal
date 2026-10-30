@@ -709,6 +709,16 @@ def test_outlines_keep_their_width_in_screen_px_as_zoomed_refilled_and_drawn(app
     v.close()
 
 
+def test_an_image_made_after_outlines_goes_under_them_and_one_refilled_stays(app):
+    v = Viewer("t")
+    v.replace("a", np.zeros((4, 4)))
+    v.add_outlines(name="ROI")
+    v.replace("b", np.zeros((4, 4)))
+    v.replace("a", np.ones((4, 4)))
+    assert names(v) == ["a", "b", "ROI"]
+    v.close()
+
+
 def test_an_overlays_visual_is_made_once_a_pass_and_only_while_it_is_shown(app, monkeypatch):
     # napari makes every layer's four, hidden, as it maps the layer and again
     # as it rebuilds the scene: half of a sweep's 27 s.

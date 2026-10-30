@@ -223,7 +223,8 @@ class Viewer(qt.QWidget):
         return {"zoom": cam.zoom, "center": list(cam.center), "angles": list(cam.angles)}
 
     def replace(self, name: str, data, **kwargs):
-        """Image layer `name` holding `data`, made or refilled."""
+        """Image layer `name` holding `data`, made or refilled; made, under
+        the outlines, which it would hide."""
         layers = self.model.layers
         if name in layers:
             layer = layers[name]
@@ -231,7 +232,11 @@ class Viewer(qt.QWidget):
             for k, v in kwargs.items():
                 setattr(layer, k, v)
             return layer
-        return self.model.add_image(data, name=name, **kwargs)
+        layer = self.model.add_image(data, name=name, **kwargs)
+        over = [i for i, lay in enumerate(layers) if lay in self._px]
+        if over:
+            layers.move(len(layers) - 1, over[0])
+        return layer
 
     def add_outlines(self, data=None, *, px: float = 1.0, **kwargs) -> Shapes:
         """A shapes layer whose edges are `px` screen px wide at any zoom.
