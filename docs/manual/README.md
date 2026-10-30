@@ -142,11 +142,6 @@ tilt가 붙는다. 아래 그래프는 tilt별 focus다. 타일이나 그래프�
 
    ![미리보기](15-preview.png)
 
-   > 주의: 첫 결과는 z 단면에만 맞춰 확대되어 다른 단면이 잘린다. layer list
-   > 맨 아래 줄의 집 아이콘(Reset view)을 누르면 세 단면이 모두 들어온다.
-
-   ![Reset view 뒤](15c-preview-fit.png)
-
 2. Parameters에서 **Recipe**(비우면 프로젝트 레시피: algorithm, filter_name,
    remove_stripe_method, retrieve_phase_method, more fields에 JSON),
    **Geometry**(비우면 group의 center px, tilt °), **Planes**(z 슬라이더, y,

@@ -110,6 +110,38 @@ def test_layers_added_to_a_grid_after_others_were_drawn_are_fit_to_it(app, paint
         v.close()
 
 
+@pytest.mark.parametrize("by_hand", [False, True])
+def test_layers_added_after_a_draw_in_the_same_pass_are_fit_to_unless_zoomed_by_hand(app, by_hand):
+    v = Viewer("t")
+    v.resize(900, 600)
+    v.setAttribute(qt.Qt.WA_DontShowOnScreen)
+    v.show()
+    pump(app, 0.2)
+    canvas = v.qt_viewer.canvas
+    cam = v.model.camera
+    # Preview's planes: the first fit alone, drawn as the window lays out
+    # the controls it brings, then the others.
+    v.model.add_image(np.ones((64, 64), "f4"), name="slice")
+    canvas.native.repaint()
+    if by_hand:
+        canvas._scene_canvas.events.mouse_wheel(pos=(450, 300), delta=(0, 1))
+        # Into the model as drawn.
+        canvas.native.repaint()
+    shown = cam.zoom, cam.center
+    v.model.add_image(np.ones((64, 64), "f4"), name="xz", translate=(72, 0))
+    pump(app, 0.2)
+    try:
+        if by_hand:
+            assert (cam.zoom, cam.center) == shown
+        else:
+            shown = cam.zoom, cam.center
+            v.model.reset_view()
+            assert (cam.zoom, cam.center) == shown
+    finally:
+        v.close_canvas()
+        v.close()
+
+
 def fill(img: np.ndarray) -> tuple[float, float]:
     """The height and width of what `img` shows on its black ground, as
     fractions of its own."""

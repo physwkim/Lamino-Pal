@@ -38,8 +38,9 @@ class _Canvas(VispyCanvas):
     A fit (fit_to_view: napari's on the first layer and on ndisplay, or
     reset_view) is to the layers, their grid and the size the canvas then
     had, napari's default 800×600 before it was made, so it is made again as
-    the canvas is resized or its scene rebuilt until it is next drawn shown.
-    A camera set by hand is kept."""
+    the canvas is resized or its scene rebuilt until the camera is set by
+    hand: by the mouse or a touch on the canvas, or by keep. Not until it is
+    drawn: Qt may draw it between the layers added in one pass."""
 
     _unfit = False
 
@@ -58,11 +59,14 @@ class _Canvas(VispyCanvas):
         self._closed = False
         self._unfit = True
         self.viewer.events.reset_view.connect(self._fitted)
+        events = self._scene_canvas.events
+        for e in (events.mouse_press, events.mouse_wheel, events.touch):
+            e.connect(self.keep)
 
     def _fitted(self, event=None) -> None:
         self._unfit = True
 
-    def keep(self) -> None:
+    def keep(self, event=None) -> None:
         """The camera as now set is no fit to redo."""
         self._unfit = False
 
@@ -139,10 +143,6 @@ class _Canvas(VispyCanvas):
         if self._owed.isActive():
             self._rebuild()
         super().on_draw(event)
-        # Painted, after the rebuild's fit: napari calls on_draw(None) itself
-        # as layers change.
-        if event is not None and self.native.isVisible():
-            self._unfit = False
 
 
 class Viewer(qt.QWidget):
