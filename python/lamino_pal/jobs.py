@@ -52,7 +52,7 @@ class JobState(BaseModel):
     gpu: int | None
     status: Status = "queued"
     progress: float = 0.0
-    message: str = ""
+    message: str = ""  # the last progress line; empty once done, where it would read as the result
     eta_s: float | None = None
     created: str
     finished: str | None = None
@@ -263,7 +263,7 @@ def run(d: Path) -> int:
             r = dispatch.run_job(
                 st.op, st.params, project=project, caller=st.caller, progress=progress, cancel=cancel_
             )
-            end.update(status="done", progress=1.0, eta_s=0.0, result=r.model_dump(mode="json"))
+            end.update(status="done", progress=1.0, message="", eta_s=0.0, result=r.model_dump(mode="json"))
         except dispatch.Cancelled:
             end.update(status="cancelled")
         except Refused as e:

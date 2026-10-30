@@ -54,7 +54,7 @@ def test_a_job_runs_detached_and_records_its_result(project):
     st = jobs.submit(project, "test.steps", {"n": 4}, "mcp")
     assert (st.status in jobs.ACTIVE, st.gpu, os.getpgid(st.pid)) == (True, None, st.pid)
     st = jobs.wait(project, st.id, 20)
-    assert (st.status, st.progress, st.message, st.error) == ("done", 1.0, "step 4", None)
+    assert (st.status, st.progress, st.message, st.error) == ("done", 1.0, "", None)
     out = project.work_dir / "artifacts/steps4.txt"
     assert st.result["artifacts"] == [str(out)] and out.read_text() == "4"
     assert st.params["out"] == str(out)
