@@ -11,6 +11,7 @@ os.environ["QT_QPA_OFFSCREEN_NO_GLX"] = "1"
 os.environ["QT_API"] = "pyside6"
 
 import re
+import subprocess
 import threading
 import time
 import warnings
@@ -333,6 +334,31 @@ def test_a_batch_row_whose_final_exists_reads_so_and_a_rerun_shows_the_job_that_
     tab.run_selected()
     assert pump(app, 5, lambda: len(ended) == 2) and ended[1].id == first
     assert win.statusBar().currentMessage() == f"recon.run: job {first} ran these params; its result is shown"
+
+
+def test_a_batch_row_whose_final_a_job_is_writing_reads_that_jobs_status(app, win):
+    win.set_context(tag="s")
+    win.show_tab("Batch")
+    tab = win.tabs["Batch"]
+    pump(app, 0.1)
+    assert tab.table.item(0, 6).text() == "to make"
+    out = dispatch.resolve(REGISTRY["recon.run"], {"tag": "s"}, win.project).out
+    # The agent's job, which this window did not submit.
+    sleeper = subprocess.Popen(["sleep", "60"])
+    try:
+        d = jobs.jobs_dir(win.project) / "j"
+        d.mkdir(parents=True)
+        st = JobState(
+            id="j", project=str(win.project.path), op="recon.run", params={"tag": "s", "out": out}, caller="mcp",
+            gpu=0, status="running", created="", pid=sleeper.pid, proc_start=jobs._proc_start(sleeper.pid),
+        )
+        jobs._write(d, st)
+        assert pump(app, 3, lambda: tab.table.item(0, 6).text() == "running")
+    finally:
+        sleeper.kill()
+        sleeper.wait()
+    # Its process gone, it failed.
+    assert pump(app, 3, lambda: tab.table.item(0, 6).text() == "to make")
 
 
 def selected(table: qt.QTableWidget) -> list[str]:

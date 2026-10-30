@@ -10,7 +10,7 @@ from pathlib import Path
 from pydantic import ValidationError
 from silx.gui import qt
 
-from lamino_pal import LaminoPalError, _core, dispatch
+from lamino_pal import LaminoPalError, _core, dispatch, jobs
 from lamino_pal.gui.runner import message
 from lamino_pal.gui.table import fill
 from lamino_pal.gui.tabs.base import BAD, GOOD, Tab, badge, button
@@ -39,6 +39,8 @@ class BatchTab(Tab):
         layout.addWidget(self.table, 1)
         layout.addWidget(self.gpus)
         self._params: dict[str, dict] = {}  # tag -> the params that bind
+        self._writing: dict[str, str] = {}  # path -> the status of the job writing it
+        win.jobs.polled.connect(self._jobs)
 
         run = self.section("Run")
         self.overwrite = qt.QCheckBox("overwrite an existing volume")
@@ -68,8 +70,11 @@ class BatchTab(Tab):
     def on_project(self) -> None:
         self.on_context()
 
-    def on_job(self, st: JobState) -> None:
-        if st.op == "recon.run":
+    def _jobs(self, states: list[JobState]) -> None:
+        """Refreshed as a job, of this window or not, starts or stops writing."""
+        writing = {o: st.status for o, st in jobs.writers(states).items()}
+        if writing != self._writing:
+            self._writing = writing
             self.on_context()
 
     def refresh(self) -> None:
@@ -110,9 +115,9 @@ class BatchTab(Tab):
                     c["algorithm"],
                     c["filter_name"],
                     out.name,
-                    "exists" if out.exists() else "to make",
+                    self._writing.get(p.out) or ("exists" if out.exists() else "to make"),
                 ]
-                color = GOOD if out.exists() else None
+                color = GOOD if cells[-1] == "exists" else None
             items = []
             for col, text in enumerate(cells):
                 item = qt.QTableWidgetItem(text)

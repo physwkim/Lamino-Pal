@@ -88,10 +88,10 @@ def submit(project: Project, name: str, params: dict[str, Any], caller: Caller) 
             # Each job checks its outputs when it starts; two queued at once
             # would both pass and the second overwrite the first.
             outs = {getattr(p, k) for k in op.path_fields(_Out)}
-            for other in list_(project):
-                clash = outs & _outs(other) if other.active else set()
-                if clash:
-                    raise Refused(f"job {other.id} is writing {min(clash)}")
+            writing = writers(list_(project))
+            clash = outs & writing.keys()
+            if clash:
+                raise Refused(f"job {writing[min(clash)].id} is writing {min(clash)}")
             gpu = _pick_gpu(project) if op.gpu else None
             now = datetime.now().astimezone()
             jid = f"{now:%Y%m%d-%H%M%S}-{name}-{secrets.token_hex(2)}"
@@ -170,6 +170,12 @@ def _outs(st: JobState) -> set[str]:
     """The paths job `st` writes."""
     o = REGISTRY.get(st.op)
     return {st.params.get(k) for k in o.path_fields(_Out)} if o else set()
+
+
+def writers(states: list[JobState]) -> dict[str, JobState]:
+    """Each path the active jobs of `states` write, to its job: a submit
+    writing one is refused."""
+    return {o: st for st in states if st.active for o in _outs(st)}
 
 
 def _dir(project: Project, jid: str) -> Path:

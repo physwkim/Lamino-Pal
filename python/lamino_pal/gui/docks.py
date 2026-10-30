@@ -25,9 +25,11 @@ def _eta(s: float | None) -> str:
 
 class JobsWidget(qt.QWidget):
     """Every job of the project, newest first, polled; `ended` carries each
-    job answering this window's submits once it ends."""
+    job answering this window's submits once it ends, `polled` every job's
+    state at each poll."""
 
     ended = qt.Signal(object)
+    polled = qt.Signal(object)
 
     def __init__(self, project: Project, parent: qt.QWidget | None = None):
         super().__init__(parent)
@@ -70,6 +72,7 @@ class JobsWidget(qt.QWidget):
                 self._mine.discard(st.id)
                 self.ended.emit(st)
         fill(self.table, rows)
+        self.polled.emit(states)
 
     def _cancel(self) -> None:
         for idx in self.table.selectionModel().selectedRows():
