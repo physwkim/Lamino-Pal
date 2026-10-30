@@ -3,6 +3,8 @@ tilt by eye. Each decision cites the figure it was read from."""
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 from silx.gui import qt
 
@@ -13,7 +15,7 @@ from lamino_pal.gui.tabs.base import BAD, GOOD, WARN, Tab, badge, button, dspin,
 from lamino_pal.jobs import JobState
 from lamino_pal.mcp import figures
 from lamino_pal.ops.registry import Result
-from lamino_pal.render import png, to_u8, window
+from lamino_pal.render import GAP, grid, origins, png, to_u8, window
 
 TRUSTWORTHY = 8.0  # ring prominence, `align.rings`
 OPEN_ARC = "open arc — ring 무효 (README: 462–467, 40 px 오차)"
@@ -35,6 +37,10 @@ class AlignTab(Tab):
         self.plot = self.graph("focus")
         self.plot.setMinimumHeight(180)
         self.plot.sigPlotSignal.connect(self._clicked)
+        self.view.model.mouse_drag_callbacks.append(self._press)
+        self.view.model.dims.events.current_step.connect(self._stepped)
+        text = self.view.model.text_overlay
+        text.position, text.color, text.font_size = "top_left", "yellow", 14
         self.verdict = qt.QLabel(wordWrap=True)
         split = qt.QSplitter(qt.Qt.Vertical)
         split.addWidget(self.view)
@@ -44,6 +50,13 @@ class AlignTab(Tab):
         layout.addWidget(self.verdict)
         layout.addWidget(split, 1)
         self.mode: str | None = None  # what the viewer shows
+        # The value of `_key` each sweep candidate or montage tile shows, its
+        # label, the one picked, and the tiles as (y, x, height, width).
+        self._values: list[float] = []
+        self._labels: list[str] = []
+        self._key: str | None = None
+        self._pick: float | None = None
+        self._tiles: list[tuple[int, int, int, int]] = []
         self._rings: Result | None = None
         self._sweep: Result | None = None
         self._job: JobState | None = None  # the tilt scan or center compare shown
@@ -112,24 +125,81 @@ class AlignTab(Tab):
 
     def _show_mode(self, mode: str | None) -> None:
         self.mode = mode
+        self._values, self._labels, self._key, self._pick, self._tiles = [], [], None, None, []
         self.view.clear()
-        self.view.model.grid.enabled = mode in ("sweep", "tilts", "centers")
-        # The tilts' slices in one row, their xz planes in the row below.
-        self.view.model.grid.shape = (2, -1) if mode == "tilts" else (-1, -1)
+        self.view.model.text_overlay.visible = False
         self.plot.clear()
         self.plot.setGraphTitle("")
         self.widen.hide()
 
-    def _layer(self, name: str, a: np.ndarray, **meta) -> None:
-        self.view.model.add_image(a, name=name, contrast_limits=window(a), colormap="gray", metadata=meta)
+    def _montage(self, rows: list[list[tuple[np.ndarray, float, str]]], key: str) -> None:
+        """Each (image, value of `key`, label) in `rows`, on its own window, a
+        labelled tile of one montage layer: napari takes 0.1 s a layer. A tile
+        is picked by a click on it or the plot."""
+        tiles = [[to_u8(a, window(a)) for a, _, _ in r] for r in rows]
+        # A frame drawn in the gap stays visible zoomed out to the whole montage.
+        gap = max(GAP, max(max(t.shape) for r in tiles for t in r) // 32)
+        at, _ = origins(tiles, gap)
+        self._tiles = [(y, x, *t.shape) for r, ats in zip(tiles, at) for t, (y, x) in zip(r, ats)]
+        self._values = [v for r in rows for _, v, _ in r]
+        self._labels = [label for r in rows for _, _, label in r]
+        self._key = key
+        model = self.view.model
+        img = model.add_image(grid(tiles, gap), name=self.mode, contrast_limits=(0, 255), colormap="gray")
+        # Pixel i spans i ± 0.5: the frame's line runs mid-gap.
+        e = (gap + 1) / 2
+        model.add_shapes(
+            [np.array([[y - e, x - e], [y + h - 1 + e, x + w - 1 + e]]) for y, x, h, w in self._tiles],
+            shape_type="rectangle",
+            name="labels",
+            edge_width=gap,
+            edge_color="transparent",
+            face_color="transparent",
+            features={"label": self._labels},
+            text={"string": "{label}", "anchor": "upper_left", "color": "yellow", "size": 12},
+        )
+        model.layers.selection.active = img
+
+    def _choose(self, v: float) -> None:
+        """`v` picked: the sweep's candidate showing it on the slider, or the
+        tiles showing it framed; marked on the plot."""
+        self._pick = v
+        model = self.view.model
+        if self.mode == "sweep":
+            i = self._values.index(v)
+            model.dims.set_current_step(0, i)
+            model.text_overlay.text = self._labels[i]
+        else:
+            model.layers["labels"].edge_color = ["blue" if x == v else "transparent" for x in self._values]
+        self.plot.removeMarker("picked")
+        self.plot.addXMarker(v, legend="picked", text="picked", color="blue")
+
+    def _stepped(self, event=None) -> None:
+        # The slider moved: its candidate picked.
+        if self.mode == "sweep" and self._values:
+            self._choose(self._values[self.view.model.dims.current_step[0]])
+
+    def _press(self, viewer, event):
+        """A click on a tile, not a drag of the view, picks it."""
+        if event.button != 1 or not self._tiles:
+            return
+        at, pos = event.position[-2:], np.asarray(event.pos)
+        yield
+        while event.type == "mouse_move":
+            yield
+        if np.hypot(*(np.asarray(event.pos) - pos)) > 4:
+            return
+        y, x = (math.floor(p + 0.5) for p in at)
+        for (ty, tx, h, w), v in zip(self._tiles, self._values):
+            if ty <= y < ty + h and tx <= x < tx + w:
+                self._choose(v)
 
     def _picked(self, key: str) -> float | None:
-        """The `key` of the selected layer, None with the user told to pick one."""
-        layer = self.view.model.layers.selection.active
-        if layer is None or key not in layer.metadata:
-            self.say(f"{self.NAME}: select one {key} layer in the layer list")
+        """The picked tile's `key`, None with the user told to pick one."""
+        if self._key != key or self._pick is None:
+            self.say(f"{self.NAME}: click a {key} tile")
             return None
-        return layer.metadata[key]
+        return self._pick
 
     # Rings -----------------------------------------------------------------
 
@@ -199,9 +269,19 @@ class AlignTab(Tab):
         self._sweep = r
         self._show_mode("sweep")
         v = r.verdict
-        for c, frame in zip(r.candidates_px, r.arrays["frames"]):
-            self._layer(f"c {c:.2f}", frame, center_px=c)
-        self.view.model.layers.selection.active = self.view.model.layers[f"c {r.candidates_px[v.index]:.2f}"]
+        model = self.view.model
+        # One candidate at a time, full size, flipped through on the slider:
+        # side by side, 49 are too small to judge. On the best's window, so a
+        # flip changes the focus alone.
+        frames = r.arrays["frames"]
+        model.add_image(frames, name="sweep", contrast_limits=window(frames[v.index]), colormap="gray")
+        model.dims.axis_labels = ("candidate", "y", "x")
+        role = {x.index: " (rival)" for x in v.rivals} | {v.index: " (best)"}
+        self._values = list(r.candidates_px)
+        self._labels = [f"center {c:.2f} px{role.get(i, '')}" for i, c in enumerate(self._values)]
+        self._key = "center_px"
+        model.text_overlay.visible = True
+        self._choose(self._values[v.index])
         self.plot.addCurve(r.candidates_px, r.focus, legend="focus", symbol="o", color="black")
         self.plot.addXMarker(v.center_px, legend="best", text="best", color="green")
         for x in v.rivals:
@@ -222,14 +302,9 @@ class AlignTab(Tab):
             badge(self.verdict, f"{head}; no sample on this slice: check the z band", BAD)
 
     def _clicked(self, event: dict) -> None:
-        """A click on the sweep curve selects the nearest candidate's layer."""
-        if event.get("event") != "mouseClicked" or self.mode != "sweep":
-            return
-        names = [lay.name for lay in self.view.model.layers if "center_px" in lay.metadata]
-        if names:
-            layers = self.view.model.layers
-            best = min(names, key=lambda n: abs(layers[n].metadata["center_px"] - event["x"]))
-            layers.selection.active = layers[best]
+        """A click on the plot picks the candidate or tiles nearest it."""
+        if event.get("event") == "mouseClicked" and self._values:
+            self._choose(min(self._values, key=lambda v: abs(v - event["x"])))
 
     def _widen(self) -> None:
         r = self._sweep
@@ -244,11 +319,10 @@ class AlignTab(Tab):
             return
         v = r.verdict
         centers = [v.center_px] + [x.center_px for x in v.rivals]
-        layer = self.view.model.layers.selection.active
-        if layer is not None and layer.metadata.get("center_px") not in (None, *centers):
-            centers.append(layer.metadata["center_px"])
+        if self._key == "center_px" and self._pick not in (None, *centers):
+            centers.append(self._pick)
         if len(centers) < 2:
-            self.say("Align: no rivals; select a candidate layer to compare with the best")
+            self.say("Align: no rivals; flip to another candidate to compare with the best")
             return
         self.submit("align.center_compare", {"tag": tag, "centers_px": centers, "tilt_deg": r.tilt_deg})
 
@@ -266,12 +340,12 @@ class AlignTab(Tab):
             if c is not None:
                 self.decide("center_px", c, [self.job_figure(self._job)], "eye")
         else:
-            self.say("Align: sweep or compare first, then select a center layer")
+            self.say("Align: sweep or compare first, then pick a center")
 
     def _candidate(self, c: float) -> str:
-        """The selected candidate's slice alone, saved to cite."""
-        layer = self.view.model.layers.selection.active
-        img = png(to_u8(layer.data, tuple(layer.contrast_limits)))
+        """The picked candidate alone, as shown, saved to cite."""
+        layer = self.view.model.layers["sweep"]
+        img = png(to_u8(layer.data[self._values.index(c)], tuple(layer.contrast_limits)))
         name = figure_name("align.center_sweep").replace(".png", f"-c{c:.2f}.png")
         return str(figures.save(self.project.work_dir, name, img))
 
@@ -297,10 +371,14 @@ class AlignTab(Tab):
         if st.op == "align.tilt_scan":
             self._show_mode("tilts")
             rows = st.result["tilts"]
-            for t, a in zip(rows, layer):
-                self._layer(f"tilt {t['tilt_deg']:g}", a, tilt_deg=t["tilt_deg"])
-            for t, a in zip(rows, arrays["xz"]):
-                self._layer(f"xz {t['tilt_deg']:g}", a[: t["depth"]], tilt_deg=t["tilt_deg"])
+            # The tilts' slices in one row, their xz planes in the row below.
+            self._montage(
+                [
+                    [(a, t["tilt_deg"], f"{t['tilt_deg']:g}°") for t, a in zip(rows, layer)],
+                    [(a[: t["depth"]], t["tilt_deg"], f"xz {t['tilt_deg']:g}°") for t, a in zip(rows, arrays["xz"])],
+                ],
+                "tilt_deg",
+            )
             x = [t["tilt_deg"] for t in rows]
             self.plot.addCurve(x, [t["focus"] for t in rows], legend="focus", symbol="o", color="gray")
             self.plot.setGraphTitle(TILT_FOCUS)
@@ -312,8 +390,7 @@ class AlignTab(Tab):
         else:
             self._show_mode("centers")
             rows = st.result["centers"]
-            for c, a in zip(rows, layer):
-                self._layer(f"c {c['center_px']:.2f}", a, center_px=c["center_px"])
+            self._montage([[(a, c["center_px"], f"{c['center_px']:.2f}") for c, a in zip(rows, layer)]], "center_px")
             x = [c["center_px"] for c in rows]
             self.plot.addCurve(x, [c["focus"] for c in rows], legend="focus", symbol="o", color="black")
             self.plot.getXAxis().setLabel("center px (full resolution)")
@@ -321,7 +398,7 @@ class AlignTab(Tab):
 
     def decide_tilt(self) -> None:
         if self.mode != "tilts" or self._job is None:
-            self.say("Align: run a tilt scan, then select a tilt layer")
+            self.say("Align: run a tilt scan, then click a tilt tile")
             return
         t = self._picked("tilt_deg")
         if t is not None:

@@ -28,23 +28,27 @@ def to_u8(a: np.ndarray, w: tuple[float, float]) -> np.ndarray:
     return np.clip(np.nan_to_num((np.asarray(a, np.float32) - lo) * scale), 0, 255).astype(np.uint8)
 
 
-def grid(rows: list[list[np.ndarray | None]]) -> np.ndarray:
-    """8-bit tiles in rows and columns, each top-left in a cell as tall as its
-    row's tallest tile and as wide as its column's widest; None leaves a cell
-    empty."""
+def origins(rows: list[list[np.ndarray | None]], gap: int = GAP) -> tuple[list[list[tuple[int, int]]], tuple[int, int]]:
+    """The top left of each tile of `rows` in `grid`'s montage, and its shape."""
     ncol = max(len(r) for r in rows)
     cells = [r + [None] * (ncol - len(r)) for r in rows]
     h = [max((t.shape[0] for t in r if t is not None), default=0) for r in cells]
     w = [max((r[j].shape[1] for r in cells if r[j] is not None), default=0) for j in range(ncol)]
-    out = np.full((sum(h) + GAP * (len(h) - 1), sum(w) + GAP * (ncol - 1)), 255, np.uint8)
-    y = 0
-    for i, r in enumerate(cells):
-        x = 0
-        for j, t in enumerate(r):
+    ys, xs = np.cumsum([0, *h[:-1]]) + gap * np.arange(len(h)), np.cumsum([0, *w[:-1]]) + gap * np.arange(ncol)
+    at = [[(int(ys[i]), int(xs[j])) for j in range(len(r))] for i, r in enumerate(rows)]
+    return at, (sum(h) + gap * (len(h) - 1), sum(w) + gap * (ncol - 1))
+
+
+def grid(rows: list[list[np.ndarray | None]], gap: int = GAP) -> np.ndarray:
+    """8-bit tiles in rows and columns, `gap` px of white apart, each top-left
+    in a cell as tall as its row's tallest tile and as wide as its column's
+    widest; None leaves a cell empty."""
+    at, shape = origins(rows, gap)
+    out = np.full(shape, 255, np.uint8)
+    for r, ats in zip(rows, at):
+        for t, (y, x) in zip(r, ats):
             if t is not None:
                 out[y : y + t.shape[0], x : x + t.shape[1]] = t
-            x += w[j] + GAP
-        y += h[i] + GAP
     return out
 
 

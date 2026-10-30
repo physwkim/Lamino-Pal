@@ -21,9 +21,11 @@ from conftest import band_at, pump
 from napari._vispy.canvas import VispyCanvas
 from napari._vispy.utils.visual import create_vispy_overlay
 from napari.layers import Image
+from PIL import Image as PILImage
 from silx.gui import qt
 from silx.gui.plot.items import Shape
 from test_recon import _scan
+from vispy.app.canvas import MouseEvent
 
 from lamino_pal import LaminoPalError, _core, dispatch, remote
 from lamino_pal.artifacts import save_h5
@@ -38,6 +40,7 @@ from lamino_pal.jobs import JobState
 from lamino_pal.ops import REGISTRY
 from lamino_pal.ops.align import Rival, SweepResult, Verdict
 from lamino_pal.ops.volume import FocusResult
+from lamino_pal.render import to_u8, window
 
 
 @pytest.fixture(scope="module")
@@ -311,7 +314,8 @@ def test_the_data_table_keeps_its_selected_folder_as_it_is_filled_again_sorted(a
     assert [r[0] for r in tab._rows()] == ["b"]
 
 
-def test_an_ambiguous_sweep_shows_every_candidate_to_pick_by_eye(app, win):
+def _ambiguous_sweep(app, win):
+    """Align showing a sweep of four 8×8 candidates, 65 best and 63 its rival."""
     rival = Rival(index=0, center_px=63.0, prominence=1.0, deficit=0.01)
     r = SweepResult(
         center_from="params",
@@ -322,8 +326,51 @@ def test_an_ambiguous_sweep_shows_every_candidate_to_pick_by_eye(app, win):
         focus=[1.0, 0.5, 1.01, 0.9],
         verdict=Verdict(kind="ambiguous", index=2, center_px=65.0, rivals=[rival]),
     ).with_arrays(frames=np.random.default_rng(0).random((4, 8, 8), dtype="f4"))
-    win.tabs["Align"]._show_sweep(r)
-    assert names(win.tabs["Align"].view) == ["c 63.00", "c 64.00", "c 65.00", "c 66.00"]
+    win.show_tab("Align")
+    at = win.tabs["Align"]
+    at._show_sweep(r)
+    pump(app, 0.1)
+    return at, r.arrays["frames"]
+
+
+def _click(view, y, x, drag=0):
+    """A left click at world (y, x) on `view`'s canvas, released `drag` px right."""
+    canvas = view.qt_viewer.canvas
+    at = (canvas.view.transform * canvas.view.scene.transform).map([x, y])[:2]
+    press = MouseEvent("mouse_press", pos=at, button=1)
+    canvas._on_mouse_press(press)
+    for dx in range(1, drag + 1):
+        canvas._on_mouse_move(MouseEvent("mouse_move", pos=at + [dx, 0], button=1, press_event=press))
+    canvas._on_mouse_release(MouseEvent("mouse_release", pos=at + [drag, 0], button=1, press_event=press))
+
+
+def framed(view):
+    """The labels whose tiles are framed."""
+    labels = view.model.layers["labels"]
+    return [t for t, c in zip(labels.features["label"], labels.edge_color) if c[3] > 0]
+
+
+def test_an_ambiguous_sweep_shows_every_candidate_to_pick_by_eye(app, win):
+    at, frames = _ambiguous_sweep(app, win)
+    # One layer, a candidate on the slider at a time, the best first, all on its window.
+    model = at.view.model
+    assert names(at.view) == ["sweep"] and model.layers["sweep"].data.shape == (4, 8, 8)
+    assert tuple(model.layers["sweep"].contrast_limits) == window(frames[2])
+    assert model.dims.current_step[0] == 2 and model.text_overlay.text == "center 65.00 px (best)"
+    assert at._picked("center_px") == 65.0
+
+
+def test_the_slider_or_a_click_on_the_plot_picks_a_sweep_candidate(app, win):
+    at, frames = _ambiguous_sweep(app, win)
+    model = at.view.model
+    model.dims.set_current_step(0, 0)
+    assert at._picked("center_px") == 63.0 and model.text_overlay.text == "center 63.00 px (rival)"
+    assert at.plot._getMarker("picked").getXPosition() == 63.0
+    at._clicked({"event": "mouseClicked", "x": 65.9})
+    assert at._picked("center_px") == 66.0 and model.dims.current_step[0] == 3
+    # The decision cites the candidate as shown.
+    cited = PILImage.open(win.project.work_dir / at._candidate(66.0))
+    assert np.array_equal(np.asarray(cited), to_u8(frames[3], window(frames[2])))
 
 
 def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_under_its_slice(app, win):
@@ -342,15 +389,22 @@ def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_under_its_slice(ap
         result=result,
     )
     at = win.tabs["Align"]
+    win.show_tab("Align")
     at.on_job(st)
-    model = at.view.model
-    assert names(at.view) == ["tilt 19", "tilt 21", "xz 19", "xz 21"]
+    pump(app, 0.1)
+    assert names(at.view) == ["tilts", "labels"]
     # Slices in the top row, their xz planes under them.
-    assert [model.grid.position(i, 4) for i in range(4)] == [(0, 0), (0, 1), (1, 0), (1, 1)]
-    assert [model.layers[f"xz {t}"].data.shape for t in (19, 21)] == [(7, 8), (9, 8)]
-    assert [layer.metadata["tilt_deg"] for layer in model.layers] == [19, 21, 19, 21]
-    at._show_mode("sweep")
-    assert model.grid.shape == (-1, -1)
+    assert at._tiles == [(0, 0, 8, 8), (0, 12, 8, 8), (12, 0, 7, 8), (12, 12, 9, 8)]
+    assert at._values == [19, 21, 19, 21]
+    assert list(at.view.model.layers["labels"].features["label"]) == ["19°", "21°", "xz 19°", "xz 21°"]
+    # None picked until a tile is clicked, not dragged from, nor clicked between.
+    _click(at.view, 3, 3, drag=20)
+    _click(at.view, 10, 10)
+    assert at._picked("tilt_deg") is None and framed(at.view) == []
+    # Either of a tilt's tiles picks it.
+    _click(at.view, 20, 15)
+    assert at._picked("tilt_deg") == 21 and framed(at.view) == ["21°", "xz 21°"]
+    assert at.plot._getMarker("picked").getXPosition() == 21
 
 
 def test_the_volume_planes_follow_one_slider_once_and_3d_shows_the_binned_volume(app, win):
