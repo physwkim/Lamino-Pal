@@ -777,6 +777,12 @@ def test_the_volume_tab_shows_the_band_carried_to_the_volumes_tilt(app, win):
     win._select("volume", "w.h5")
     vt = win.tabs["Volume"]
     assert (vt.z0.value(), vt.z1.value()) == (lo, hi)
+    # Read at bin 2, the band is not carried to bin 4: every slice, not w.h5's.
+    with h5py.File(win.project.work_dir / "b.h5", "w") as f:
+        f["exchange/data"] = np.random.default_rng(0).random((d30 // 2, 4, 4), dtype="f4")
+        f.require_group("lamino_pal/provenance").attrs.update(tag="s", center_px=64.5, tilt_deg=30.0, bin=4)
+    win._select("volume", "b.h5")
+    assert lo > 0 and (vt.z0.value(), vt.z1.value()) == (0, d30 // 2 - 1)
 
 
 def test_the_focus_curve_shades_the_band_air_and_z_wrap(app, win):

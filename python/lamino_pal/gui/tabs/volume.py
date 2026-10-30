@@ -175,14 +175,16 @@ class VolumeTab(Tab):
         self.info.setText(f"<b>{vol}</b> {nz}×{ny}×{nx} {d.dtype}" + (f"; {what}" if what else "; no provenance"))
         for s in (self.z0, self.z1):
             s.setRange(0, nz - 1)
+        # The group's band, else every slice: never the last volume's band.
+        z0, z1 = 0, nz - 1
         g = self.win.find_group()
         zb = None if g is None else g.z_band
         if zb is not None and {"bin", "tilt_deg"} <= prov.keys():
             # A band read at another binning is not shown.
             with contextlib.suppress(Refused):
                 z0, z1 = units.band_for(zb, prov["bin"], prov["tilt_deg"], nz)
-                self.z0.setValue(z0)
-                self.z1.setValue(z1)
+        self.z0.setValue(z0)
+        self.z1.setValue(z1)
         self._goto()
         self.run("volume.valid_fov", {"volume": vol}, self._show_fov, channel="volume-fov", failed=self._no_fov)
         if self.pages.currentIndex() == 1:
