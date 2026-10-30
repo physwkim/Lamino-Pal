@@ -30,12 +30,12 @@ class ExportTab(Tab):
         self.info = qt.QLabel(wordWrap=True)
         # What the last export job wrote; the line above is the volume's alone.
         self.exported = qt.QLabel(wordWrap=True)
-        self.hist = self.graph("histogram", "value", "voxels")
+        self.hist = self.graph("histogram", "value", "voxels", empty="Window draws the slices' histogram here")
         self.mips = {}
         row = qt.QSplitter(qt.Qt.Horizontal)
         for k, title in MIPS:
-            p = self.graph(f"MIP {k}", "Columns", "Rows", Plot2D)
-            p.setGraphTitle(f"MIP {title}")
+            empty = f"MIP {title}: Maximum intensity projections draws it"
+            p = self.graph(f"MIP {k}", "Columns", "Rows", Plot2D, empty=empty)
             p.setKeepDataAspectRatio(True)
             p.setYAxisInverted(True)
             row.addWidget(p)
@@ -142,9 +142,11 @@ class ExportTab(Tab):
         out = r["artifacts"][0]
         if st.op == "export.mip":
             _, a = load_h5(out)
-            for k, p in self.mips.items():
+            for k, title in MIPS:
+                p = self.mips[k]
                 lo, hi = window(a[k])
                 p.addImage(a[k], legend="mip", colormap=Colormap("gray", vmin=lo, vmax=hi), resetzoom=True)
+                p.setGraphTitle(f"MIP {title}")
             self.exported.setText(f"job {st.id}: MIPs of slices [{r['z'][0]}, {r['z'][1]}) in {out}")
         elif st.op == "export.tiff16":
             w = r["window"]

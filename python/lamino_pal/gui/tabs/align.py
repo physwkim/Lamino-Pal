@@ -38,7 +38,12 @@ class AlignTab(Tab):
     def __init__(self, win):
         super().__init__(win)
         self.view = self.viewer("align")
-        self.plot = self.graph("focus", "center px (full resolution)", "focus")
+        self.plot = self.graph(
+            "focus",
+            "center px (full resolution)",
+            "focus",
+            empty="Sweep, Compare by eye or Tilt scan draws each candidate's focus here",
+        )
         self.plot.sigPlotSignal.connect(self._clicked)
         self.view.model.mouse_drag_callbacks.append(self._press)
         self.view.model.dims.events.current_step.connect(self._stepped)
@@ -132,7 +137,6 @@ class AlignTab(Tab):
         self.view.clear()
         self.view.model.text_overlay.visible = False
         self.plot.clear()
-        self.plot.setGraphTitle("")
         self.widen.hide()
 
     def _montage(self, rows: list[list[tuple[np.ndarray, float, str]]], key: str) -> None:

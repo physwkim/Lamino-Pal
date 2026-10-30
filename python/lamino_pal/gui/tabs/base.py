@@ -59,6 +59,11 @@ def _hold_plot(p: PlotWidget, e: DrawEvent) -> None:
     p.setMinimumHeight(p.height() - b.height() + math.ceil(text * ppi) + PLOT_LEAST)
 
 
+def _blank(p: PlotWidget, clear: Callable[[], None], empty: str) -> None:
+    clear()
+    p.setGraphTitle(empty)
+
+
 def badge(label: qt.QLabel, text: str, color: str | None = None) -> None:
     label.setText(text if color is None else f"<span style='color:{color}'><b>{text}</b></span>")
 
@@ -121,8 +126,9 @@ class Tab(qt.QWidget):
         self.viewers.append(v)
         return v
 
-    def graph(self, title: str, x: str, y: str, cls: type[PlotWidget] = Plot1D) -> PlotWidget:
-        """A graph of this tab with axes `x` and `y`, named `title` to an agent."""
+    def graph(self, title: str, x: str, y: str, cls: type[PlotWidget] = Plot1D, empty: str = "") -> PlotWidget:
+        """A graph of this tab with axes `x` and `y`, named `title` to an agent,
+        and titled `empty`, what draws it, while cleared."""
         p = cls()
         p.getXAxis().setLabel(x)
         p.getYAxis().setLabel(y)
@@ -133,6 +139,9 @@ class Tab(qt.QWidget):
         b.ax.title.set_wrap(True)
         b.ax.title._get_wrap_line_width = partial(_wrap_width, b.ax.title)
         b.mpl_connect("draw_event", partial(_hold_plot, p))
+        # silx's clear keeps the title, of a result no longer shown.
+        p.clear = partial(_blank, p, p.clear, empty)
+        p.clear()
         self.graphs[title] = p
         return p
 

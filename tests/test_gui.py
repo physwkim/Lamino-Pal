@@ -38,6 +38,7 @@ from lamino_pal.gui.actions import ACTIONS, RunOpDialog
 from lamino_pal.gui.form import ParamsForm
 from lamino_pal.gui.runner import Runner, by_hand
 from lamino_pal.gui.table import fill
+from lamino_pal.gui.tabs.export import MIPS
 from lamino_pal.gui.tree import _key
 from lamino_pal.gui.viewer import Viewer
 from lamino_pal.jobs import JobState
@@ -744,6 +745,7 @@ def test_an_export_job_leaves_the_header_naming_the_volume(app, win):
     pump(app, 0.1)
     assert ex.info.text() == head
     assert ex.exported.text().startswith(f"job {ended[0].id}: MIPs of slices")
+    assert [p.getGraphTitle() for p in ex.mips.values()] == [f"MIP {t}" for _, t in MIPS]
 
 
 def test_the_volume_tab_shows_the_band_carried_to_the_volumes_tilt(app, win):
@@ -774,6 +776,24 @@ def test_the_focus_curve_shades_the_band_air_and_z_wrap(app, win):
     assert vt.plot.getGraphTitle().startswith(
         "suggested band [70, 149] (gray), air [30, 69] (blue), z wrap [0, 29] (orange)\n"
     )
+
+
+def test_a_graph_shown_empty_names_the_button_that_draws_it(app, win):
+    """Made, or cleared as a volume change clears Volume's and Export's, a
+    graph shown with nothing says what draws it: silx's clear keeps the last
+    result's title. Preview's FRC is hidden while empty."""
+    from lamino_pal.ops.export import WindowResult
+
+    win._select("volume", "v.h5")
+    r = FocusResult(shape=(150, 8, 8), step=1, peak_z=70, band=(70, 149), air=[(30, 69)], wrap=(0, 29))
+    win.tabs["Volume"]._show_focus(r.with_arrays(focus=np.ones(150)))
+    win.tabs["Export"]._show_window(WindowResult(z=(0, 8), window=(0.1, 0.9), span=(0.0, 1.0), hist=[1, 2, 3]))
+    win.set_context(volume=None)
+    for tab in win.tabs.values():
+        buttons = [b.text() for b in tab.controls.findChildren(qt.QPushButton)]
+        for name, p in tab.graphs.items():
+            if p.isVisibleTo(tab):
+                assert any(b in p.getGraphTitle() for b in buttons), (tab.NAME, name, p.getGraphTitle())
 
 
 @pytest.mark.parametrize("ndisplay, grid", [(2, True), (3, False)])
