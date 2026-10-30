@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 from napari._vispy.canvas import VispyCanvas
 from napari.components import ViewerModel
-from napari.layers import Layer, Shapes
+from napari.layers import Image, Layer, Shapes
 from napari.qt import QtViewer, get_stylesheet
 from napari.resources._icons import _theme_path
 from napari.utils.events import disconnect_events
@@ -180,8 +180,11 @@ class Viewer(qt.QWidget):
         # napari's: drag_to_zoom, Alt+drag, now _drag's.
         self.model.mouse_drag_callbacks[:] = [self._drag]
         self.model.mouse_wheel_callbacks.append(self._wheel)
-        # The camera before each box zoom, for Zoom Back.
+        # The camera before each box zoom, for Zoom Back: on the images then
+        # shown, forgotten as one is added, removed or refilled.
         self._back: list[tuple[float, tuple]] = []
+        self.model.layers.events.inserted.connect(self._new_image)
+        self.model.layers.events.removed.connect(self._new_image)
         self._menu = qt.QMenu(self)
         self._menu.addAction(icons.getQIcon("zoom-back"), "Zoom Back", self.zoom_back)
         # silx's modes, put by napari's buttons under the layer list: a left
@@ -269,6 +272,18 @@ class Viewer(qt.QWidget):
             self.look(zoom=zoom, center=list(center))
         else:
             self.model.reset_view()
+
+    def _new_image(self, event) -> None:
+        layer = event.value
+        if isinstance(layer, Image):
+            self._forget(event)
+            if event.type == "inserted":
+                layer.events.data.connect(self._forget)
+            else:
+                layer.events.data.disconnect(self._forget)
+
+    def _forget(self, event) -> None:
+        self._back.clear()
 
     def _name_modes(self, event=None) -> None:
         if self.model.dims.ndisplay == 2:

@@ -348,6 +348,37 @@ def test_a_left_drag_zooms_a_2d_view_to_its_box_and_zoom_back_undoes_it(app):
         v.close()
 
 
+@pytest.mark.parametrize("change", ["refill", "add", "remove", "slice", "overlay"])
+def test_zoom_back_forgets_its_boxes_once_an_image_changes(app, change):
+    v = shown(app)
+    cam = v.model.camera
+    try:
+        before = v.look(zoom=2.0, center=[30.0, 60.0])
+        v.model.add_image(np.zeros((20, 60, 120), "f4"), name="other", visible=False)
+        mouse(app, v, qt.Qt.LeftButton, (200, 100), (320, 180))
+        image = v.model.layers[0]
+        if change == "refill":
+            image.data = image.data[::-1]
+        elif change == "add":
+            v.model.add_image(np.zeros((20, 60, 120), "f4"), visible=False)
+        elif change == "remove":
+            v.model.layers.remove("other")
+        elif change == "slice":
+            v.model.dims.set_current_step(0, 5)
+        else:
+            v.add_outlines([np.array([[0, 0], [9, 9]])], shape_type="line").data = []
+        v.zoom_back()
+        back = cam.zoom, list(cam.center[-2:])
+        if change in ("slice", "overlay"):
+            assert back == (before["zoom"], before["center"][-2:])
+        else:
+            v.model.reset_view()
+            assert back == (cam.zoom, list(cam.center[-2:]))
+    finally:
+        v.close_canvas()
+        v.close()
+
+
 # Under silx's 5 px drag; a drag, but a box of no area.
 @pytest.mark.parametrize("b", [(203, 102), (212, 100)])
 def test_a_left_drag_too_short_or_thin_for_a_box_leaves_a_2d_view(app, b):
