@@ -27,7 +27,7 @@ import lamino_pal
 from lamino_pal import LaminoPalError, Refused, _core, scans, units
 from lamino_pal.artifacts import save_h5, scratch, written
 from lamino_pal.dispatch import Context
-from lamino_pal.ops.align import _decided_center, _slice, _stem, _tilt
+from lamino_pal.ops.align import _decided_center, _digest, _slice, _stem, _tilt
 from lamino_pal.ops.registry import OptOutPath, OutputParams, Params, Result, op
 from lamino_pal.project import Group, Project, Scan
 from lamino_pal.render import window
@@ -169,7 +169,7 @@ class RecipesParams(Setup, Where, OutputParams):
     variants: list[Recipe] = Field(default_factory=lambda: [dict(v) for v in DEFAULT_VARIANTS], min_length=1)
     signal: Rect | None = None
     background: Rect | None = None
-    out: OptOutPath = None  # default artifacts/<tag>_recipes_c<center>_t<tilt>.h5
+    out: OptOutPath = None  # default artifacts/<tag>_recipes_c<center>_t<tilt>_<digest>.h5
 
     @model_validator(mode="after")
     def _both_rois(self) -> RecipesParams:
@@ -204,7 +204,7 @@ class RecipesResult(Result):
 
 
 def _recipes_out(p: RecipesParams, _: Project) -> dict[str, str]:
-    return {"out": f"artifacts/{p.tag}_recipes_c{_stem(p.center_px)}_t{_stem(p.tilt_deg)}.h5"}
+    return {"out": f"artifacts/{p.tag}_recipes_c{_stem(p.center_px)}_t{_stem(p.tilt_deg)}_{_digest(p)}.h5"}
 
 
 def _label(v: dict[str, Any]) -> str:
@@ -265,7 +265,7 @@ def compare(ctx: Context, p: RecipesParams) -> RecipesResult:
 
 
 class SplitParams(Setup, Where, OutputParams):
-    out: OptOutPath = None  # default artifacts/<tag>_split_c<center>_t<tilt>.h5
+    out: OptOutPath = None  # default artifacts/<tag>_split_c<center>_t<tilt>_<digest>.h5
 
 
 class SplitResult(Result):
@@ -280,7 +280,7 @@ class SplitResult(Result):
 
 
 def _split_out(p: SplitParams, _: Project) -> dict[str, str]:
-    return {"out": f"artifacts/{p.tag}_split_c{_stem(p.center_px)}_t{_stem(p.tilt_deg)}.h5"}
+    return {"out": f"artifacts/{p.tag}_split_c{_stem(p.center_px)}_t{_stem(p.tilt_deg)}_{_digest(p)}.h5"}
 
 
 FRC_THRESHOLD = 1 / 7

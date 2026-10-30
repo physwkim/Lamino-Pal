@@ -1,3 +1,5 @@
+import re
+
 import h5py
 import numpy as np
 import pytest
@@ -118,7 +120,7 @@ def test_tilt_scan_carries_the_band_to_each_tilt(mount, run_job):
     ]
     assert seen[-3:] == pytest.approx([1 / 3, 2 / 3, 1.0])
     meta, arrays = load_h5(r.artifacts[0])
-    assert r.artifacts[0].endswith("artifacts/step1000_tilts_cgroup_t18-22.h5")
+    assert re.search(r"artifacts/step1000_tilts_cgroup_t18-22_[0-9a-f]{6}\.h5$", r.artifacts[0])
     assert meta["center_px"] == 1008.5 and arrays["layer"].shape == (3, 1024, 1024)
     # Each tilt shows its band's middle, one layer at every tilt, not z_peak.
     assert [t.slice for t in r.tilts] == [504, 510, 517] == [sum(t.band) // 2 for t in r.tilts]

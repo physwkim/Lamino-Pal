@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -55,7 +56,24 @@ def test_bind_freezes_the_decisions_and_names_the_volume_by_them(project):
     assert Path(p.out) == project.work_dir / "final_s_bin2_c64p5_t19p5_fourierrec_shepp.h5"
     p = validate(project, "recon.split", tag="s", recipe={"filter_name": "shepp"})
     assert p.recipe == {"filter_name": "shepp"}
-    assert Path(p.out) == project.work_dir / "artifacts/s_split_c64p5_t19p5.h5"
+    assert re.fullmatch(r"s_split_c64p5_t19p5_[0-9a-f]{6}\.h5", Path(p.out).name)
+
+
+def test_an_analysis_output_is_named_by_every_param(project):
+    _scan(project, "s")
+    _decide(project, "s", center_px=64.5, tilt_deg=19.5)
+    roi = {"signal": (20, 30, 20, 30), "background": (34, 44, 34, 44)}
+    out = validate(project, "recon.compare", tag="s", **roi).out
+    assert validate(project, "recon.compare", tag="s", **roi).out == out
+    # Each pair differs in a param its name does not show.
+    pairs = [
+        ("recon.compare", {**roi, "background": (34, 44, 38, 48)}, roi),
+        ("recon.split", {"z": 2}, {"z": 3}),
+        ("align.tilt_scan", {"tilts_deg": [18.0, 22.0]}, {"tilts_deg": [18.0, 20.0, 22.0]}),
+        ("align.center_compare", {"centers_px": [60.0, 68.0]}, {"centers_px": [60.0, 64.0, 68.0]}),
+    ]
+    for name, a, b in pairs:
+        assert validate(project, name, tag="s", **a).out != validate(project, name, tag="s", **b).out, name
 
 
 def test_a_recipe_may_not_set_what_lamino_pal_sets(project):

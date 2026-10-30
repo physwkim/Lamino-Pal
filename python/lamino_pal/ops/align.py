@@ -7,6 +7,7 @@ group stores them; slices and z rows are the scan's own reconstruction rows.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any, Literal
 
@@ -201,11 +202,19 @@ def _stem(x: float) -> str:
     return f"{x:g}".replace(".", "p").replace("-", "m")
 
 
+def _digest(p: OutputParams) -> str:
+    """Of every param but the output's, for an output name that shows only
+    some: params that differ elsewhere name another file, not one a submit
+    is refused for as existing."""
+    s = json.dumps(p.model_dump(mode="json", exclude={"out", "overwrite"}), sort_keys=True)
+    return hashlib.sha1(s.encode()).hexdigest()[:6]
+
+
 class TiltScanParams(OutputParams):
     tag: str
     center_px: float | None = None  # default: the group's decided center
     tilts_deg: list[float] = Field(default_factory=lambda: [16.0, 18.0, 20.0, 22.0, 24.0], min_length=1)
-    out: OptOutPath = None  # default artifacts/<tag>_tilts_c<center>_t<lo>-<hi>.h5
+    out: OptOutPath = None  # default artifacts/<tag>_tilts_c<center>_t<lo>-<hi>_<digest>.h5
 
 
 class TiltFocus(BaseModel):
@@ -225,7 +234,7 @@ class TiltScanResult(Result):
 def _tilt_scan_out(p: TiltScanParams, _: Project) -> dict[str, str]:
     c = "group" if p.center_px is None else _stem(p.center_px)
     t = p.tilts_deg
-    return {"out": f"artifacts/{p.tag}_tilts_c{c}_t{_stem(min(t))}-{_stem(max(t))}.h5"}
+    return {"out": f"artifacts/{p.tag}_tilts_c{c}_t{_stem(min(t))}-{_stem(max(t))}_{_digest(p)}.h5"}
 
 
 @op(
@@ -284,7 +293,7 @@ class CompareParams(OutputParams):
     tag: str
     centers_px: list[float] = Field(min_length=2)
     tilt_deg: float | None = None  # default: the group's, else 20
-    out: OptOutPath = None  # default artifacts/<tag>_centers_<c0>-<c1>_t<tilt>.h5
+    out: OptOutPath = None  # default artifacts/<tag>_centers_<c0>-<c1>_t<tilt>_<digest>.h5
 
 
 class CenterFocus(BaseModel):
@@ -303,7 +312,7 @@ class CompareResult(Result):
 def _compare_out(p: CompareParams, _: Project) -> dict[str, str]:
     c = p.centers_px
     t = "group" if p.tilt_deg is None else _stem(p.tilt_deg)
-    return {"out": f"artifacts/{p.tag}_centers_{_stem(min(c))}-{_stem(max(c))}_t{t}.h5"}
+    return {"out": f"artifacts/{p.tag}_centers_{_stem(min(c))}-{_stem(max(c))}_t{t}_{_digest(p)}.h5"}
 
 
 @op(
