@@ -8,6 +8,7 @@ os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["QT_QPA_OFFSCREEN_NO_GLX"] = "1"
 os.environ["QT_API"] = "pyside6"
 
+import re
 import threading
 import time
 
@@ -423,6 +424,16 @@ def test_a_canvas_made_over_layers_is_the_one_that_heard_them_inserted(app, ndis
         return state
 
     assert made(True) == made(False)
+
+
+def test_a_viewers_napari_buttons_and_its_docks_find_their_icons(app):
+    v = Viewer("t")
+    qv = v.qt_viewer
+    for w in (qv, qv.dockLayerControls, qv.dockLayerList):
+        icons = re.findall(r'url\("(theme_light:/[^"]+)"\)', w.styleSheet())
+        assert icons and all(qt.QFile.exists(i) for i in icons)
+    v.close_canvas()
+    v.close()
 
 
 def test_a_viewer_makes_its_canvas_when_first_shown(app, win):

@@ -3,13 +3,26 @@ time it is needed."""
 
 from __future__ import annotations
 
+import functools
 from types import SimpleNamespace
 from typing import Any
 
 from napari._vispy.canvas import VispyCanvas
 from napari.components import ViewerModel
-from napari.qt import QtViewer
+from napari.qt import QtViewer, get_stylesheet
+from napari.resources._icons import _theme_path
+from napari.utils.theme import available_themes
 from silx.gui import qt
+
+
+@functools.cache
+def _napari_style() -> str:
+    """napari's light stylesheet in the window's font size. napari's buttons
+    draw their icons only through it, as `theme_<id>:` urls on search paths
+    napari's own QApplication would have registered."""
+    for name in available_themes():
+        qt.QDir.addSearchPath(f"theme_{name}", str(_theme_path(name)))
+    return get_stylesheet("light", extra_variables={"font_size": f"{qt.QApplication.font().pointSize()}pt"})
 
 
 class _Canvas(VispyCanvas):
@@ -82,6 +95,9 @@ class Viewer(qt.QWidget):
                 qv.controls._add(SimpleNamespace(value=layer))
             qv.controls._display(SimpleNamespace(value=self.model.layers.selection.active))
             qv._update_camera_depth()
+            # The docks too: the window takes them out from under qv.
+            for w in (qv, qv.dockLayerControls, qv.dockLayerList):
+                w.setStyleSheet(_napari_style())
             self._qt_viewer = qv
             self.layout().addWidget(qv)
             self.made.emit(qv)
