@@ -109,7 +109,7 @@ def test_preview_crosses_its_planes_at_the_voxel(project):
     assert sl.shape == (64, 64) and yz.shape == (r.depth, 64)
     np.testing.assert_array_equal(xz[z], sl[y])
     np.testing.assert_array_equal(yz[z], sl[:, x])
-    assert seen[-1] == f"preview: row {r.depth}/{r.depth}"
+    assert seen[-1] == f"row {r.depth}/{r.depth}"
 
 
 def test_preview_takes_the_middle_of_the_band_carried_to_its_tilt(project):
@@ -147,8 +147,10 @@ def test_split_reconstructs_each_half_alone(project, run_job):
     # Tall and wide enough for a disk past the FRC taper.
     _scan(project, "s", shape=(32, 160))
     _decide(project, "s", center_px=160.5)
-    r = run_job(project, "recon.split", {"tag": "s", "recipe": {"algorithm": "fourierrec"}})
-    assert r.nproj == (8, 8)
+    seen = []
+    params = {"tag": "s", "recipe": {"algorithm": "fourierrec"}}
+    r = run_job(project, "recon.split", params, lambda f, m: seen.append(m))
+    assert r.nproj == (8, 8) and seen[-1].startswith("odd half: row ")
     assert r.radius_px >= 32
     meta, arrays = load_h5(r.artifacts[0])
     assert arrays["slice"].shape == (2, 160, 160) and arrays["frc"].shape == (80,)

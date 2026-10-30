@@ -109,14 +109,15 @@ def _planes(
     recipe: dict[str, Any],
     at: tuple[int, int, int],
     span: tuple[float, float],
-    what: str,
+    half: str | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """The slice, xz and yz planes through `at`, reporting progress over
-    `span` of the op's."""
+    `span` of the op's, of `half` of the projections when given."""
     lo, hi = span
 
     def on_rows(done: int, rh: int) -> None:
-        ctx.progress(lo + (hi - lo) * done / rh, f"{what}: row {done}/{rh}")
+        msg = f"row {done}/{rh}"
+        ctx.progress(lo + (hi - lo) * done / rh, msg if half is None else f"{half} half: {msg}")
 
     c = units.center_for_scan(scan, p.center_px)
     return stack.planes(json.dumps(recipe), c, p.tilt_deg, at, on_rows)
@@ -143,7 +144,7 @@ def preview(ctx: Context, p: PreviewParams) -> PreviewResult:
     Arrays: `slice` [y, x], `xz` [z, x], `yz` [z, y]."""
     scan, group, stack = _stack(ctx, p.tag)
     at = _at(stack, scan, group, p, p.z, p.y, p.x)
-    sl, xz, yz = _planes(ctx, stack, scan, p, p.recipe, at, (0.05, 1.0), "preview")
+    sl, xz, yz = _planes(ctx, stack, scan, p, p.recipe, at, (0.05, 1.0))
     return PreviewResult(
         center_px=p.center_px,
         tilt_deg=p.tilt_deg,
