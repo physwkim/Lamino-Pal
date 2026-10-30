@@ -364,17 +364,21 @@ def test_a_left_drag_too_short_or_thin_for_a_box_leaves_a_2d_view(app, b):
 
 
 @pytest.mark.parametrize(
-    "ndisplay, button, modifiers",
+    "ndisplay, button, modifiers, pan_mode",
     [
-        (2, qt.Qt.MiddleButton, qt.Qt.NoModifier),
-        (3, qt.Qt.MiddleButton, qt.Qt.NoModifier),
-        (3, qt.Qt.LeftButton, qt.Qt.ControlModifier),
+        (2, qt.Qt.MiddleButton, qt.Qt.NoModifier, False),
+        (3, qt.Qt.MiddleButton, qt.Qt.NoModifier, False),
+        (3, qt.Qt.LeftButton, qt.Qt.ControlModifier, False),
+        (2, qt.Qt.LeftButton, qt.Qt.NoModifier, True),
+        (3, qt.Qt.LeftButton, qt.Qt.NoModifier, True),
     ],
 )
-def test_a_pan_keeps_the_point_grabbed_under_the_cursor(app, ndisplay, button, modifiers):
+def test_a_pan_keeps_the_point_grabbed_under_the_cursor(app, ndisplay, button, modifiers, pan_mode):
     v = shown(app, ndisplay)
     cam = v.model.camera
     try:
+        if pan_mode:
+            v.pan_mode.click()
         angles, zoom = cam.angles, cam.zoom
         a, b = (200, 100), (330, 190)
         grabbed = world(v, a)

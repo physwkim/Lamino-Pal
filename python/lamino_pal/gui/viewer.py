@@ -183,6 +183,19 @@ class Viewer(qt.QWidget):
         self._back: list[tuple[float, tuple]] = []
         self._menu = qt.QMenu(self)
         self._menu.addAction(icons.getQIcon("zoom-back"), "Zoom Back", self.zoom_back)
+        # silx's modes, put by napari's buttons under the layer list: a left
+        # drag zooms to a box, in 3D turns the view, or pans.
+        modes = qt.QButtonGroup(self)
+        self.zoom_mode, self.pan_mode = (qt.QPushButton(checkable=True, iconSize=qt.QSize(20, 20)) for _ in range(2))
+        for b in (self.zoom_mode, self.pan_mode):
+            # napari's size; its stylesheet draws the rest.
+            b.setFixedSize(28, 28)
+            modes.addButton(b)
+        self.pan_mode.setIcon(icons.getQIcon("pan"))
+        self.pan_mode.setToolTip("Pan mode")
+        self.zoom_mode.setChecked(True)
+        self.model.dims.events.ndisplay.connect(self._name_modes)
+        self._name_modes()
         layout = qt.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -198,6 +211,8 @@ class Viewer(qt.QWidget):
                 qv.controls._add(SimpleNamespace(value=layer))
             qv.controls._display(SimpleNamespace(value=self.model.layers.selection.active))
             qv._update_camera_depth()
+            for i, b in enumerate((self.zoom_mode, self.pan_mode)):
+                qv.viewerButtons.layout().insertWidget(i, b)
             # The docks too: the window takes them out from under qv.
             for w in (qv, qv.dockLayerControls, qv.dockLayerList):
                 w.setStyleSheet(_napari_style())
@@ -254,16 +269,25 @@ class Viewer(qt.QWidget):
         else:
             self.model.reset_view()
 
+    def _name_modes(self, event=None) -> None:
+        if self.model.dims.ndisplay == 2:
+            self.zoom_mode.setIcon(icons.getQIcon("zoom"))
+            self.zoom_mode.setToolTip("Zoom mode")
+        else:
+            self.zoom_mode.setIcon(icons.getQIcon("rotate-3d"))
+            self.zoom_mode.setToolTip("Rotate mode")
+
     def _drag(self, model: ViewerModel, event):
         """silx's mouse wherever napari's would move the camera: in 2D a
         left drag zooms to a box and a right click offers Zoom Back; a
         middle drag pans, and in 3D, where a left drag turns the view, a
-        Ctrl+left one too. A press taken here never reaches the vispy
-        camera, which keeps only the wheel in 2D."""
+        Ctrl+left one too; in Pan mode a left drag pans. A press taken here
+        never reaches the vispy camera, which keeps only the wheel in 2D."""
         if not model.camera.mouse_pan:
             return
         flat, button = model.dims.ndisplay == 2, event.button
-        if button == 3 or (not flat and button == 1 and "Control" in event.modifiers):
+        pans = self.pan_mode.isChecked() or (not flat and "Control" in event.modifiers)
+        if button == 3 or (button == 1 and pans):
             gen = self._pan(model, event)
         elif button == 1 and (flat or "Alt" in event.modifiers):
             gen = self._box(model, event)

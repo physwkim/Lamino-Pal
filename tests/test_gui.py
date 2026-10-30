@@ -863,6 +863,18 @@ def test_an_image_made_after_outlines_goes_under_them_and_one_refilled_stays(app
     v.close()
 
 
+def test_a_viewers_mode_buttons_lead_naparis_row_and_name_its_3d_mode(app):
+    v = Viewer("t")
+    row = v.qt_viewer.viewerButtons.layout()
+    assert [row.itemAt(i).widget() for i in (0, 1)] == [v.zoom_mode, v.pan_mode]
+    assert v.zoom_mode.isChecked() and v.zoom_mode.toolTip() == "Zoom mode"
+    v.model.dims.ndisplay = 3
+    assert v.zoom_mode.toolTip() == "Rotate mode"
+    v.pan_mode.click()
+    assert v.pan_mode.isChecked() and not v.zoom_mode.isChecked()
+    v.close()
+
+
 def test_overlays_leave_the_image_active_and_its_controls_shown(app, win):
     from napari.layers import Image, Points
 
