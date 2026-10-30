@@ -118,14 +118,12 @@ spread를 보여 준다. 이 값을 쓰려면 **Decide center (rings)**를 누�
 
 ### 3.3 Tilt
 
-**tilts °**에 후보를 공백으로 쓰고(`18 20 22`) **Tilt scan**을 누른다. 위
+**tilts °**에 후보를 공백으로 쓰고(`16 18 20 22 24`) **Tilt scan**을 누른다. 위
 줄은 tilt별 band 가운데 slice, 아래 줄은 같은 tilt의 xz 단면이며 각 타일에
 tilt가 붙는다. 아래 그래프는 tilt별 focus다. 타일이나 그래프를 눌러 고르면
 그 타일에 파란 테두리가 생긴다. **Decide selected tilt**를 누른다.
 
 ![tilt scan](13-tilt.png)
-
-> 주의: 그래프 높이가 낮아 그래프 제목의 위쪽이 잘린다.
 
 ## 4. Preview: 레시피 확인과 품질 비교
 
@@ -216,8 +214,6 @@ Compare/Split 결과(표, 변형 레이어)는 위 입력을 바꾸거나 **Prev
 
    ![focus by z](25-focus-by-z.png)
 
-   > 주의: 그래프 제목과 ×10ⁿ 배율 글자가 위에서 잘린다.
-
 4. 3D: **Bin 2×2×2 for 3D**로 이 volume의 축소판을 만든다(작업). 끝나면 3D
    페이지에 `3D` 레이어가 생기고, **rendering**(mip 등)과 **depiction**
    (volume/plane)을 고른다. 3D 페이지에서는 layer controls/list가 3D 레이어의
@@ -241,14 +237,10 @@ Compare/Split 결과(표, 변형 레이어)는 위 입력을 바꾸거나 **Prev
 
    ![window](29-window.png)
 
-   > 주의: 히스토그램 제목의 위쪽이 잘린다.
-
 3. **Maximum intensity projections**는 z, y, x 방향 MIP를 만든다(작업).
    결과는 `artifacts/<stem>_z<z0>-<z1>_mip.h5`다.
 
    ![MIP](30-mip.png)
-
-   > 주의: MIP 그래프의 y축 눈금 글자 왼쪽이 잘린다(`1000`이 `000`으로 보임).
 
 4. **16-bit TIFF**는 그 범위를 window로 16-bit BigTIFF
    `<stem>_z<z0>-<z1>_16bit.tif`에 쓴다(작업). 끝나면 머리글에 파일, slice 수,

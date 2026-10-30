@@ -462,8 +462,43 @@ def test_a_graphs_markers_are_named_in_its_title_not_on_the_plot_where_close_one
     assert texts == {at.plot: [""] * 3, vt.plot: [""] * 3}
     assert at.plot.getGraphTitle() == "best (green), rivals (orange), picked (blue)"
     assert vt.plot.getGraphTitle() == (
-        "suggested band [70, 149] (gray); peak (gray line), first and last slice (blue lines, draggable)"
+        "suggested band [70, 149] (gray)\npeak (gray line), first and last slice (blue lines, draggable)"
     )
+
+
+def test_a_graph_at_the_windows_least_size_draws_all_its_text_and_a_plot(app, win):
+    from lamino_pal.gui.tabs.align import PICKED, TILT_FOCUS
+    from lamino_pal.ops.export import WindowResult
+
+    rng = np.random.default_rng(0)
+    win.resize(1, 1)
+    at, _ = _ambiguous_sweep(app, win)
+    # Values that take a ×10ⁿ offset, under the longest title.
+    at.plot.addCurve([63, 64, 65, 66], [6.5e-8, 6.0e-8, 6.6e-8, 6.2e-8], legend="focus")
+    at.plot.setGraphTitle(f"{TILT_FOCUS}; {PICKED}")
+    vt = win.tabs["Volume"]
+    f = rng.random(1090) * 1e-7
+    r = FocusResult(shape=(1090, 8, 8), step=1, peak_z=397, band=(372, 1089), air=[(116, 371)], wrap=(0, 115))
+    vt._show_focus(r.with_arrays(focus=f))
+    et = win.tabs["Export"]
+    hist = list((1e5 * np.exp(-np.linspace(-3, 3, 256) ** 2)).astype(int))
+    et._show_window(WindowResult(z=(372, 1089), window=(-1.2e-4, 3.4e-4), span=(-3.5e-4, 5.7e-4), hist=hist))
+    for k, shape in (("z", (1090, 1024)), ("y", (717, 1024)), ("x", (717, 1090))):
+        et.mips[k].addImage(rng.random(shape, dtype="f4"), legend="mip", resetzoom=True)
+    pt = win.tabs["Preview"]
+    pt.frc.addCurve(np.arange(256) / 512, np.linspace(1, 0, 256), legend="FRC")
+    pt.frc.show()
+    for tab in win.tabs.values():
+        win.show_tab(tab.NAME)
+        pump(app, 0.2)
+        for name, g in tab.graphs.items():
+            b = g.getBackend()
+            b.fig.canvas.draw()
+            renderer = b.fig.canvas.get_renderer()
+            text, page = b.fig.get_tightbbox(renderer), b.fig.bbox_inches.padded(0.01)
+            assert page.contains(*text.min) and page.contains(*text.max), name
+            plot = b.ax.get_window_extent(renderer)
+            assert min(plot.width, plot.height) >= 80, name
 
 
 def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_under_its_slice(app, win):
@@ -658,7 +693,7 @@ def test_the_focus_curve_shades_the_band_air_and_z_wrap(app, win):
     shapes = {k: (v.min(), v.max()) for k, v in x.items()}
     assert shapes == {"suggested band 0": (70, 149), "air 0": (30, 69), "z wrap 0": (0, 29)}
     assert vt.plot.getGraphTitle().startswith(
-        "suggested band [70, 149] (gray), air [30, 69] (blue), z wrap [0, 29] (orange); "
+        "suggested band [70, 149] (gray), air [30, 69] (blue), z wrap [0, 29] (orange)\n"
     )
 
 

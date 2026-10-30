@@ -29,7 +29,6 @@ class ExportTab(Tab):
         super().__init__(win)
         self.info = qt.QLabel(wordWrap=True)
         self.hist = self.graph("histogram")
-        self.hist.setMinimumHeight(180)
         self.hist.getXAxis().setLabel("value")
         self.hist.getYAxis().setLabel("voxels")
         self.mips = {}

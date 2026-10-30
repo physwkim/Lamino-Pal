@@ -58,7 +58,6 @@ class PreviewTab(Tab):
         self.cnr.itemSelectionChanged.connect(self._variant)
         self.cnr.hide()
         self.frc = self.graph("FRC")
-        self.frc.setMinimumHeight(160)
         self.frc.hide()
         layout = qt.QVBoxLayout(self)
         layout.addWidget(self.info)

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from silx import config
 from silx.gui import qt
 from silx.gui.plot import Plot1D, PlotWidget
 
@@ -17,6 +18,14 @@ from lamino_pal.ops.registry import Result
 from lamino_pal.project import Method
 
 GOOD, WARN, BAD = "#070", "#b60", "#b00"
+
+# silx's margins are fixed fractions of a graph, which in a short one clip its
+# title and tick labels; its tight layout, read as a graph is made, fits them
+# to the text.
+config._MPL_TIGHT_LAYOUT = True
+# A graph's least size: its toolbar, position bar and colorbar, two lines of
+# title, its ticks and labels, and a plot 80 px or more each way.
+GRAPH_SIZE = (300, 270)
 
 
 def badge(label: qt.QLabel, text: str, color: str | None = None) -> None:
@@ -84,6 +93,7 @@ class Tab(qt.QWidget):
     def graph(self, title: str, cls: type[PlotWidget] = Plot1D) -> PlotWidget:
         """A graph of this tab, named `title` to an agent."""
         p = cls()
+        p.setMinimumSize(*GRAPH_SIZE)
         self.graphs[title] = p
         return p
 

@@ -38,7 +38,6 @@ class AlignTab(Tab):
         super().__init__(win)
         self.view = self.viewer("align")
         self.plot = self.graph("focus")
-        self.plot.setMinimumHeight(180)
         self.plot.sigPlotSignal.connect(self._clicked)
         self.view.model.mouse_drag_callbacks.append(self._press)
         self.view.model.dims.events.current_step.connect(self._stepped)

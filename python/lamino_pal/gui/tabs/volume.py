@@ -62,7 +62,6 @@ class VolumeTab(Tab):
         self.info = qt.QLabel(wordWrap=True)
         self.fov = qt.QLabel(wordWrap=True)
         self.plot = self.graph("focus by z")
-        self.plot.setMinimumHeight(170)
         self.plot.sigPlotSignal.connect(self._marker_moved)
         aux = qt.QSplitter(qt.Qt.Vertical)
         aux.addWidget(self.views["y"])
@@ -261,7 +260,8 @@ class VolumeTab(Tab):
         # The markers named here: silx writes a marker's text at the plot's
         # top, where z0's and the peak's overlap.
         marks = "peak (gray line), first and last slice (blue lines, draggable)"
-        self.plot.setGraphTitle("; ".join(filter(None, (figures.shades_key(spans), marks))))
+        # Two lines: on one they are wider than the graph.
+        self.plot.setGraphTitle("\n".join(filter(None, (figures.shades_key(spans), marks))))
         f = r.arrays["focus"]
         top = max(f, default=0.0)
         for k, v in spans.items():
