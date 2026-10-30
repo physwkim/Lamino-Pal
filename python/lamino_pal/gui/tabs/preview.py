@@ -219,7 +219,9 @@ class PreviewTab(Tab):
 
     def _roi_layer(self) -> None:
         if "ROI" not in self.view.model.layers:
-            self.view.add_outlines(name="ROI", shape_type="rectangle", edge_color="yellow", face_color="transparent")
+            self.view.add_outlines(
+                name="ROI", shape_type="rectangle", edge_color="yellow", face_color="transparent", by_hand=True
+            )
         roi = self.view.model.layers["ROI"]
         self.view.model.layers.selection.active = roi
         roi.mode = "add_rectangle"

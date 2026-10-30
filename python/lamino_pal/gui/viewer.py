@@ -145,6 +145,18 @@ class _Canvas(VispyCanvas):
         super().on_draw(event)
 
 
+class _Outlines(Shapes):
+    """Shapes only shown: napari draws the active layer's shape under the
+    cursor in its highlight colour, over the colour it is to be read by."""
+
+    _highlight_visible = property(lambda self: False, lambda self, visible: None)
+
+    @property
+    def _type_string(self) -> str:
+        # Its icon in the layer list.
+        return "shapes"
+
+
 class Viewer(qt.QWidget):
     # Its QtViewer was made.
     made = qt.Signal(object)
@@ -238,12 +250,13 @@ class Viewer(qt.QWidget):
             layers.move(len(layers) - 1, over[0])
         return layer
 
-    def add_outlines(self, data=None, *, px: float = 1.0, **kwargs) -> Shapes:
+    def add_outlines(self, data=None, *, px: float = 1.0, by_hand: bool = False, **kwargs) -> Shapes:
         """A shapes layer whose edges are `px` screen px wide at any zoom.
         napari's are as wide in data px, and GL draws one thinner than a
         screen px only where it covers a pixel's center: zoomed out, a line
-        across the pixel rows is missing."""
-        layer = self.model.add_shapes(data, **kwargs)
+        across the pixel rows is missing. Highlighted as napari's only when
+        drawn `by_hand`."""
+        layer = self.model.add_layer((Shapes if by_hand else _Outlines)(data, **kwargs))
         self._px[layer] = px
         # napari gives a shape set as data a width of 1.
         layer.events.data.connect(self._widen)

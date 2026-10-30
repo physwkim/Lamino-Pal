@@ -733,6 +733,19 @@ def test_an_image_made_after_outlines_goes_under_them_and_one_refilled_stays(app
     v.close()
 
 
+def test_outlines_are_highlighted_under_the_cursor_only_if_drawn_by_hand(app):
+    v = Viewer("t")
+    v.model.add_image(np.zeros((16, 16)))
+    line = np.array([[8.0, 0], [8, 15]])
+    for by_hand in (False, True):
+        layer = v.add_outlines([line], shape_type="line", by_hand=by_hand)
+        assert v.model.layers.selection.active is layer
+        # The status bar's look up, as the cursor moves over it.
+        assert layer.get_value((8, 4), world=True)[0] == 0
+        assert (layer._outline_shapes()[0] is not None) == by_hand
+    v.close()
+
+
 def test_an_overlays_visual_is_made_once_a_pass_and_only_while_it_is_shown(app, monkeypatch):
     # napari makes every layer's four, hidden, as it maps the layer and again
     # as it rebuilds the scene: half of a sweep's 27 s.
