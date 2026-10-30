@@ -111,6 +111,25 @@ def test_valid_fov_takes_the_scan_center_and_tilt_from_the_provenance(project):
         run(project, "volume.valid_fov", volume=path, tilt_deg=30.0)
 
 
+def test_valid_fov_of_a_binned_volume_is_in_its_voxels(project, run_job):
+    _scan(project, "s", shape=(32, 64))
+    depth = _core.lamino_depth(32, 20.0)
+    path = _volume(project.work_dir / "v.h5", np.zeros((depth, 64, 64), np.float32))
+    with h5py.File(path, "r+") as f:
+        f.require_group("lamino_pal/provenance").attrs.update(tag="s", center_px=64.5, tilt_deg=20.0, bin=2)
+    binned = run_job(project, "export.bin", {"volume": path}).artifacts[0]
+    full = json.loads(_core.valid_fov(64, 32, 32.0, 20.0))
+    r = run(project, "volume.valid_fov", volume=binned)
+    # Whole at full resolution on slices 13..23: binned, the pairs 14..23.
+    assert (full["full_z"], r.r_lateral, r.full_z) == ([13, 23], 16.0, (7, 11))
+    assert len(r.arrays["radius"]) == depth // 2
+    assert r.arrays["radius"][6] == full["radius"][12] / 2 < 16.0
+    with h5py.File(binned, "r+") as f:
+        f["lamino_pal/provenance"].attrs["bin"] = 3
+    with pytest.raises(Refused, match="is bin 3, not a multiple of scan s's bin 2"):
+        run(project, "volume.valid_fov", volume=binned)
+
+
 @pytest.mark.golden
 @pytest.mark.parametrize(
     "name, band, air, wrap",

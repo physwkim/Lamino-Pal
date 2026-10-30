@@ -232,15 +232,21 @@ def valid_fov(ctx: Context, p: FovParams) -> FovResult:
     with h5py.File(path, "r") as f:
         _, h, w = f["exchange/data"].shape
     fov = json.loads(_core.valid_fov(w, h, units.center_for_scan(scan, c), t))
+    k, rem = divmod(prov.get("bin", scan.bin), scan.bin)
+    if rem or not k:
+        raise Refused(f"{p.volume} is bin {prov['bin']}, not a multiple of scan {tag}'s bin {scan.bin}")
     nz, ny, nx = data(p.volume).shape
-    if (nz, ny, nx) != (fov["depth"], w, w):
-        raise Refused(
-            f"{p.volume} is {nz}x{ny}x{nx}; scan {tag} at tilt {t} reconstructs {fov['depth']}x{w}x{w}"
-        )
+    want = (fov["depth"] // k, w // k, w // k)
+    if (nz, ny, nx) != want:
+        raise Refused(f"{p.volume} is {nz}x{ny}x{nx}; scan {tag} at tilt {t} reconstructs {'x'.join(map(str, want))}")
+    # export.bin's k-block means: a slice is as valid as its block's least
+    # valid slice.
+    radius = np.array(fov["radius"])[: nz * k].reshape(nz, k).min(1)
+    full = np.flatnonzero(radius >= fov["r_lateral"])
     return FovResult(
         tag=tag,
         center_px=c,
         tilt_deg=t,
-        r_lateral=fov["r_lateral"],
-        full_z=fov["full_z"],
-    ).with_arrays(radius=np.array(fov["radius"]))
+        r_lateral=fov["r_lateral"] / k,
+        full_z=(int(full[0]), int(full[-1])) if full.size else None,
+    ).with_arrays(radius=radius / k)
