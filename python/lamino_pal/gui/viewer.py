@@ -4,6 +4,7 @@ time it is needed."""
 from __future__ import annotations
 
 import functools
+import gc
 from types import SimpleNamespace
 from typing import Any
 
@@ -11,6 +12,7 @@ from napari._vispy.canvas import VispyCanvas
 from napari.components import ViewerModel
 from napari.qt import QtViewer, get_stylesheet
 from napari.resources._icons import _theme_path
+from napari.utils.events import disconnect_events
 from napari.utils.theme import available_themes
 from silx.gui import qt
 
@@ -26,9 +28,11 @@ def _napari_style() -> str:
 
 
 class _Canvas(VispyCanvas):
-    """napari 0.6.6's canvas, made on a model that may already hold layers:
-    it reorders and regrids every layer of the model as each one is mapped,
-    a KeyError until the last is, so it waits for that.
+    """napari 0.6.6's canvas, its scene graph rebuilt once for all the layers
+    added, removed or reordered in one event-loop pass, or before a draw that
+    comes first. napari rebuilds it, every layer's overlays, per layer: O(n²),
+    minutes for a sweep's 49 candidates. A canvas made on a model already
+    holding layers is so rebuilt with all of them mapped.
 
     A fit (fit_to_view: napari's on the first layer and on ndisplay, or
     reset_view) is to the size the canvas last had, napari's default 800×600
@@ -39,6 +43,17 @@ class _Canvas(VispyCanvas):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Active while a rebuild is owed; deleted with the widget it is for.
+        self._owed = qt.QTimer(self.native, singleShot=True, interval=0)
+        self._owed.timeout.connect(self._rebuild)
+        # Not owed: napari makes a layer's overlays in the grid the scene has,
+        # which must be the model's.
+        grid = self.viewer.grid.events
+        for e in (grid.stride, grid.shape, grid.enabled, grid.spacing):
+            e.disconnect(self._update_scenegraph)
+            e.connect(self._rebuild)
+        # A layer was removed since the last rebuild.
+        self._closed = False
         self._unfit = True
         self.viewer.events.reset_view.connect(self._fitted)
         # Painted: napari calls on_draw itself as layers change.
@@ -60,16 +75,37 @@ class _Canvas(VispyCanvas):
         if self._unfit and self.viewer.layers:
             self.viewer.fit_to_view()
 
-    def _mapped(self) -> bool:
-        return all(layer in self.layer_to_visual for layer in self.viewer.layers)
-
-    def _reorder_layers(self) -> None:
-        if self._mapped():
-            super()._reorder_layers()
-
     def _update_scenegraph(self, event=None) -> None:
-        if self._mapped():
-            super()._update_scenegraph(event)
+        self._owed.start()
+
+    def _remove_layer(self, event) -> None:
+        # napari's, but for its gc.collect and context.finish (0.3 s), which
+        # free the layer's GL objects before the rebuild: left to it, once.
+        layer = event.value
+        disconnect_events(layer.events, self)
+        disconnect_events(layer.events, self._overlay_callbacks[layer])
+        disconnect_events(layer._overlays.events, self._overlay_callbacks[layer])
+        del self._overlay_callbacks[layer]
+        vispy_layer = self.layer_to_visual.pop(layer)
+        disconnect_events(self.viewer.camera.events, vispy_layer)
+        vispy_layer.close()
+        self._remove_layer_overlays(layer)
+        del self._layer_overlay_to_visual[layer]
+        self._closed = True
+        self._update_scenegraph()
+
+    def _rebuild(self) -> None:
+        self._owed.stop()
+        if self._closed:
+            self._closed = False
+            gc.collect()
+            self._scene_canvas.context.finish()
+        super()._update_scenegraph()
+
+    def on_draw(self, event) -> None:
+        if self._owed.isActive():
+            self._rebuild()
+        super().on_draw(event)
 
 
 class Viewer(qt.QWidget):

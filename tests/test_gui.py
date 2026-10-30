@@ -1,6 +1,7 @@
 """The GUI offscreen, without GL: the layers, the steps and the widgets
 around them. What the canvases draw is test_render.py's."""
 
+import gc
 import os
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
@@ -17,6 +18,7 @@ import numpy as np
 import PySide6.QtCore  # noqa: F401  # silx takes the binding napari's qtpy is pinned to
 import pytest
 from conftest import band_at, pump
+from napari._vispy.canvas import VispyCanvas
 from silx.gui import qt
 from silx.gui.plot.items import Shape
 from test_recon import _scan
@@ -421,6 +423,8 @@ def test_a_canvas_made_over_layers_is_the_one_that_heard_them_inserted(app, ndis
         pump(app, 0.1)
         for i in range(0 if before else 3):
             v.model.add_image(data[i], name=f"c {i}")
+        # The scene is rebuilt as the event loop runs.
+        pump(app, 0.1)
         qv, layers = v.qt_viewer, v.model.layers
         visuals = [qv.canvas.layer_to_visual[layer] for layer in layers]
         controls = qv.controls
@@ -436,6 +440,56 @@ def test_a_canvas_made_over_layers_is_the_one_that_heard_them_inserted(app, ndis
         return state
 
     assert made(True) == made(False)
+
+
+def test_a_canvas_rebuilds_its_scene_once_for_the_layers_changed_in_one_pass(app, monkeypatch):
+    # napari rebuilds it, every layer's overlays, per layer, and collects
+    # garbage, 0.3 s, per layer removed: 49 took minutes.
+    built = []
+    rebuild, collect = VispyCanvas._update_scenegraph, gc.collect
+
+    def counted(self, event=None):
+        built.append(len(self.viewer.layers))
+        rebuild(self, event)
+
+    def collected(*args):
+        built.append("gc")
+        return collect(*args)
+
+    monkeypatch.setattr(VispyCanvas, "_update_scenegraph", counted)
+    monkeypatch.setattr(gc, "collect", collected)
+    v = Viewer("t")
+    v.show()
+    pump(app, 0.1)
+    built.clear()
+    v.model.grid.enabled = True
+    for i in range(5):
+        v.model.add_image(np.zeros((4, 4), "f4"), name=f"c {i}")
+    pump(app, 0.1)
+    v.clear()
+    pump(app, 0.1)
+    v.close_canvas()
+    v.close()
+    # The grid's at once, the layers' once each pass.
+    assert built == [0, 5, "gc", 0]
+
+
+def test_a_layer_added_as_its_grid_is_turned_on_is_drawn_in_it(app):
+    v = Viewer("t")
+    v.show()
+    # Align's rings, in one view, then its sweep in a grid.
+    v.model.add_image(np.zeros((4, 4), "f4"), name="mean")
+    pump(app, 0.1)
+    v.clear()
+    v.model.grid.enabled = True
+    v.model.add_image(np.zeros((4, 4), "f4"), name="c 0")
+    pump(app, 0.1)
+    canvas = v.qt_viewer.canvas
+    try:
+        assert canvas.layer_to_visual[v.model.layers["c 0"]].node.parent is canvas.grid_views[0].scene
+    finally:
+        v.close_canvas()
+        v.close()
 
 
 def test_a_viewers_napari_buttons_and_its_docks_find_their_icons(app):
