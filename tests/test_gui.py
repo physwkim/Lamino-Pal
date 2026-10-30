@@ -44,6 +44,7 @@ from lamino_pal.gui.viewer import Viewer
 from lamino_pal.jobs import JobState
 from lamino_pal.ops import REGISTRY
 from lamino_pal.ops.align import Rival, SweepResult, Verdict
+from lamino_pal.ops.raw import RangeResult, TiltFlowResult
 from lamino_pal.ops.volume import FocusResult
 from lamino_pal.render import to_u8, window
 
@@ -267,6 +268,18 @@ def test_status_names_how_each_field_was_decided_and_the_next_tab(scene):
     assert status.source(g, "tilt_deg") == "eye" and not status.unconfirmed(g)
     scene.commit(lambda f: setattr(f.group[0], "center_px", None))
     assert status.status(scene, scene.data.group[0]).next_tab == "Align"
+
+
+def test_a_measured_angle_that_rounds_to_zero_reads_unsigned(win):
+    tab = win.tabs["Raw"]
+    turn = dict(nproj=801, last_deg=360.0, step_deg=0.45, step_spread_deg=0.0, kind="full", turn_index=800)
+    tab._range(RangeResult(first_deg=-0.001, warnings=[], **turn))
+    tab._flow(TiltFlowResult(
+        tilt_deg=19.999, tilt_sigma_deg=0.1, roll_deg=-0.001, roll_sigma_deg=0.1,
+        axis_px=1009.0, axis_sigma_px=1.0, pairs=[], group_tilt_deg=None,
+    ))
+    assert "0.00° to 360.00°" in tab.range.text() and "roll 0.00°" in tab.flow_out.text()
+    assert "-0.00" not in tab.range.text() + tab.flow_out.text()
 
 
 def test_an_instant_op_shows_its_figure_and_a_job_its_end(app, win):

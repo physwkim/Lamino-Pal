@@ -299,7 +299,7 @@ class PreviewTab(Tab):
             res = "none below 1/7" if r["resolution_px"] is None else f"{r['resolution_px']:.1f} px"
             self.info.setText(
                 f"job {st.id}: halves {r['nproj'][0]}/{r['nproj'][1]} at z {r['at'][0]}, "
-                f"correlation {r['correlation']:.3f}, FRC resolution {res}; toggle the half layers"
+                f"correlation {r['correlation']:z.3f}, FRC resolution {res}; toggle the half layers"
             )
 
     def _variant(self) -> None:

@@ -80,11 +80,11 @@ class RawTab(Tab):
             return
         i = self.view.model.dims.current_step[0]
         if i < self.theta.size:
-            self.angle.setText(f"projection {i}  θ = {self.theta[i]:.3f}°")
+            self.angle.setText(f"projection {i}  θ = {self.theta[i]:z.3f}°")
 
     def _range(self, r: Result) -> None:
         text = (
-            f"{r.kind} turn: {r.nproj} projections, {r.first_deg:.2f}° to {r.last_deg:.2f}°, "
+            f"{r.kind} turn: {r.nproj} projections, {r.first_deg:z.2f}° to {r.last_deg:z.2f}°, "
             f"step {r.step_deg:.4f}° (±{r.step_spread_deg:.4f})"
         )
         if r.turn_index is not None:
@@ -113,7 +113,7 @@ class RawTab(Tab):
         self.view.replace("first", a["first"], contrast_limits=w, colormap="green", blending="opaque")
         self.view.replace("turn", a["turn"], contrast_limits=w, colormap="magenta", blending="additive")
         self.drift_out.setText(
-            f"projection {r.turn} against {r.first}: dy {r.dy_px:+.1f} px, dx {r.dx_px:+.1f} px (full resolution)"
+            f"projection {r.turn} against {r.first}: dy {r.dy_px:+z.1f} px, dx {r.dx_px:+z.1f} px (full resolution)"
         )
 
     def tilt_flow(self) -> None:
@@ -123,7 +123,7 @@ class RawTab(Tab):
 
     def _flow(self, r: Result) -> None:
         text = (
-            f"tilt {r.tilt_deg:.2f}° ± {r.tilt_sigma_deg:.2f}, roll {r.roll_deg:.2f}° ± {r.roll_sigma_deg:.2f}, "
+            f"tilt {r.tilt_deg:z.2f}° ± {r.tilt_sigma_deg:.2f}, roll {r.roll_deg:z.2f}° ± {r.roll_sigma_deg:.2f}, "
             f"axis {r.axis_px:.1f} ± {r.axis_sigma_px:.1f} px over {len(r.pairs)} pairs"
         )
         if r.group_tilt_deg is None:
