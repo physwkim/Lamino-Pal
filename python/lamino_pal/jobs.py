@@ -25,11 +25,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from lamino_pal import Refused, _core, artifacts, dispatch
+from lamino_pal import LaminoPalError, Refused, _core, artifacts, dispatch
 from lamino_pal.dispatch import Caller
-from lamino_pal.ops.registry import REGISTRY, _Out
+from lamino_pal.ops.registry import REGISTRY, _In, _Out
 from lamino_pal.project import Project
 
 Status = Literal["queued", "running", "done", "failed", "cancelled"]
@@ -89,8 +89,7 @@ def submit(project: Project, name: str, params: dict[str, Any], caller: Caller) 
             # would both pass and the second overwrite the first.
             outs = {getattr(p, k) for k in op.path_fields(_Out)}
             for other in list_(project):
-                o = REGISTRY.get(other.op)
-                clash = outs & {other.params.get(k) for k in o.path_fields(_Out)} if other.active and o else set()
+                clash = outs & _outs(other) if other.active else set()
                 if clash:
                     raise Refused(f"job {other.id} is writing {min(clash)}")
             gpu = _pick_gpu(project) if op.gpu else None
@@ -105,7 +104,8 @@ def submit(project: Project, name: str, params: dict[str, Any], caller: Caller) 
                 params=p.model_dump(mode="json"),
                 caller=caller,
                 gpu=gpu,
-                created=now.isoformat(timespec="seconds"),
+                # To the microsecond, taken under the lock: jobs sort by it.
+                created=now.isoformat(timespec="microseconds"),
             )
             # Held from the queued state to the pid: whoever reads an active
             # job under it finds its pid.
@@ -135,6 +135,41 @@ def submit(project: Project, name: str, params: dict[str, Any], caller: Caller) 
         _write(d, st)
         entry.update(status="queued", job=st.id)
     return st
+
+
+def answering(project: Project, name: str, params: dict[str, Any]) -> JobState | None:
+    """The done job a submit of job op `name` on `params` would only redo: the
+    newest job writing its outputs, which still exist, ran these params but
+    overwrite, and nothing an op reads as it runs, the project file and the
+    stacks and input files, changed after that job was submitted. None when a
+    submit is to start a job or be refused."""
+    try:
+        op = dispatch.lookup(name, job=True)
+        p = dispatch.resolve(op, params, project)
+    except (LaminoPalError, ValidationError):
+        return None  # the submit refuses them, logged
+    outs = {getattr(p, k) for k in op.path_fields(_Out)}
+    if not outs or getattr(p, "overwrite") or not all(Path(o).exists() for o in outs):
+        return None
+    last = next((st for st in reversed(list_(project)) if outs & _outs(st)), None)
+    if last is None or last.status != "done" or last.op != name:
+        return None
+    if {**last.params, "overwrite": False} != p.model_dump(mode="json"):
+        return None
+    reads = {str(project.path), *(getattr(p, k) for k in op.path_fields(_In))}
+    reads |= {str(project.work_dir / s.h5) for s in project.reload().scan}
+    # File times lag the clock by up to a kernel tick: a write in the second
+    # the job was submitted in counts as after it.
+    since = int(datetime.fromisoformat(last.created).timestamp())
+    if any(Path(f).stat().st_mtime >= since for f in reads - outs if Path(f).exists()):
+        return None
+    return last
+
+
+def _outs(st: JobState) -> set[str]:
+    """The paths job `st` writes."""
+    o = REGISTRY.get(st.op)
+    return {st.params.get(k) for k in o.path_fields(_Out)} if o else set()
 
 
 def _dir(project: Project, jid: str) -> Path:

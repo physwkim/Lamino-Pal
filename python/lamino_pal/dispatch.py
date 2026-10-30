@@ -206,7 +206,18 @@ def _close(path: Path, entry: dict[str, Any], params: Any, t0: float) -> None:
 
 
 def validate(op: Op, params: dict[str, Any] | Params, project: Project) -> Params:
-    """`params` checked against `op`, with its paths resolved and checked."""
+    """`params` checked against `op`, with its paths resolved and checked: an
+    output that exists is refused without overwrite."""
+    p = resolve(op, params, project)
+    for k in op.path_fields(_Out):
+        if Path(getattr(p, k)).exists() and not getattr(p, "overwrite"):
+            raise Refused(f"{k}: {getattr(p, k)} exists; pass overwrite to replace it")
+    return p
+
+
+def resolve(op: Op, params: dict[str, Any] | Params, project: Project) -> Params:
+    """`params` checked against `op`, with its paths resolved and checked, an
+    output that exists allowed."""
     if isinstance(params, BaseModel):
         params = params.model_dump()
     p = op.params.model_validate(params)
@@ -233,8 +244,6 @@ def _resolve_paths(op: Op, p: Params, project: Project) -> Params:
             raise Refused(f"{k}: {path} is outside the work directory {wd}")
         if is_under(path, raw):
             raise Refused(f"{k}: {path} is under the raw root {raw}")
-        if path.exists() and not getattr(p, "overwrite"):
-            raise Refused(f"{k}: {path} exists; pass overwrite to replace it")
         upd[k] = str(path)
     return p.model_copy(update=upd)
 

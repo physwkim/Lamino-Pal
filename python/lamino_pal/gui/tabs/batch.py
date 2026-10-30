@@ -95,7 +95,7 @@ class BatchTab(Tab):
         for tag in tags:
             params = {"tag": tag, "overwrite": self.overwrite.isChecked()}
             try:
-                p = dispatch.validate(op, params, self.project)
+                p = dispatch.resolve(op, params, self.project)
             except (LaminoPalError, ValidationError) as e:
                 cells = [tag, "", "", "", "", "", message(e)]
                 color = BAD

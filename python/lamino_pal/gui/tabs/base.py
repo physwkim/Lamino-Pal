@@ -116,7 +116,9 @@ class Tab(qt.QWidget):
 
     def submit(self, op: str, params: dict[str, Any]) -> JobState | None:
         st = self.runner.submit(op, params)
-        if st is not None:
+        if st is not None and not st.active:
+            self.say(f"{op}: job {st.id} ran these params; its result is shown", 10)
+        elif st is not None:
             self.say(f"{op}: job {st.id} queued" + ("" if st.gpu is None else f" for GPU {st.gpu}"), 10)
         return st
 

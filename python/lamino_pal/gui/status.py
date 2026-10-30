@@ -45,7 +45,7 @@ def finals(project: Project, group: Group) -> tuple[int, int]:
     done = 0
     for t in tags:
         try:
-            p = dispatch.validate(REGISTRY["recon.run"], {"tag": t, "overwrite": True}, project)
+            p = dispatch.resolve(REGISTRY["recon.run"], {"tag": t}, project)
         except (LaminoPalError, ValidationError):
             continue
         done += Path(p.out).exists()

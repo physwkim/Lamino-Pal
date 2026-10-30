@@ -48,7 +48,7 @@ def message(e: BaseException) -> str:
 class Runner(qt.QObject):
     failed = qt.Signal(str, str)  # op, message
     progressed = qt.Signal(str, float, str)  # channel, fraction, message
-    submitted = qt.Signal(object)  # JobState
+    submitted = qt.Signal(object)  # JobState: started, or done on the params
 
     def __init__(self, project: Project, ask: Callable[[str], bool], parent: qt.QObject | None = None):
         """`ask(op)` is whether to cancel op, running on the channel of a
@@ -121,9 +121,10 @@ class Runner(qt.QObject):
         (self._gpu if REGISTRY[name].gpu else self._cpu).submit(work)
 
     def submit(self, name: str, params: dict[str, Any]) -> JobState | None:
-        """Start job op `name`; None, with `failed` emitted, when refused."""
+        """Start job op `name`, or answer with the done job that ran these
+        params (`jobs.answering`); None, with `failed` emitted, when refused."""
         try:
-            st = jobs.submit(self.project, name, params, "gui")
+            st = jobs.answering(self.project, name, params) or jobs.submit(self.project, name, params, "gui")
         except (LaminoPalError, ValidationError, OSError) as e:
             self.failed.emit(name, message(e))
             return None

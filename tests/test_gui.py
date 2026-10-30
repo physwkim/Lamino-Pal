@@ -27,7 +27,7 @@ from silx.gui.plot.items import Shape
 from test_recon import _scan
 from vispy.app.canvas import MouseEvent
 
-from lamino_pal import LaminoPalError, _core, dispatch, remote
+from lamino_pal import LaminoPalError, _core, dispatch, jobs, remote
 from lamino_pal.artifacts import save_h5
 from lamino_pal.gui import status
 from lamino_pal.gui.actions import ACTIONS, RunOpDialog
@@ -280,6 +280,56 @@ def test_an_instant_op_shows_its_figure_and_a_job_its_end(app, win):
     rows = [win.jobs.table.item(r, 0).text() for r in range(win.jobs.table.rowCount())]
     assert st.id in rows
     dialog.close()
+
+
+def test_a_job_resubmitted_on_a_done_jobs_params_shows_that_job_until_its_input_changes(app, win):
+    old = time.time() - 60
+    for f in win.project.work_dir.rglob("*"):
+        os.utime(f, (old, old))
+    win.set_context(tag="s", volume="v.h5")
+    ended = []
+    win.jobs.ended.connect(ended.append)
+    win.tabs["Volume"].bin()
+    assert pump(app, 60, lambda: ended) and ended[0].status == "done"
+    first = ended[0].id
+    win.tabs["Volume"].bin()
+    assert pump(app, 5, lambda: len(ended) == 2) and ended[1].id == first
+    assert win.statusBar().currentMessage() == f"export.bin: job {first} ran these params; its result is shown"
+    # The dialog holds the id before the job's end is polled.
+    dialog = RunOpDialog(win, "export.bin")
+    dialog._run()
+    assert pump(app, 5, lambda: len(ended) == 3) and ended[2].id == dialog._job == first
+    assert f'"id": "{first}"' in dialog.text.toPlainText()
+    assert [st.id for st in jobs.list_(win.project)] == [first]
+    os.utime(win.project.work_dir / "v.h5")
+    failed = []
+    win.runner.failed.connect(lambda op, m: failed.append(m))
+    assert win.runner.submit("export.bin", {"volume": "v.h5"}) is None
+    assert "exists; pass overwrite to replace it" in failed[0]
+    dialog.close()
+
+
+def test_a_batch_row_whose_final_exists_reads_so_and_a_rerun_shows_the_job_that_made_it(app, win):
+    old = time.time() - 60
+    for f in win.project.work_dir.rglob("*"):
+        os.utime(f, (old, old))
+    win.set_context(tag="s")
+    tab = win.tabs["Batch"]
+    tab.refresh()
+    assert tab.table.item(0, 6).text() == "to make"
+    ended = []
+    win.jobs.ended.connect(ended.append)
+    tab.table.selectRow(0)
+    tab.run_selected()
+    assert pump(app, 120, lambda: ended) and ended[0].status == "done"
+    first = ended[0].id
+    tab.refresh()
+    assert [tab.table.item(0, c).text() for c in (1, 6)] == ["64.50", "exists"]
+    assert status.finals(win.project, win.find_group()) == (1, 1)
+    tab.table.selectRow(0)
+    tab.run_selected()
+    assert pump(app, 5, lambda: len(ended) == 2) and ended[1].id == first
+    assert win.statusBar().currentMessage() == f"recon.run: job {first} ran these params; its result is shown"
 
 
 def selected(table: qt.QTableWidget) -> list[str]:

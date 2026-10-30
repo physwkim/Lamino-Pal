@@ -99,6 +99,27 @@ def test_an_existing_or_queued_output_is_refused_at_submit(project):
     assert st.status == "done"
 
 
+def test_a_done_job_answers_a_submit_of_its_params_until_what_it_read_changes(project):
+    old = time.time() - 60
+    os.utime(project.path, (old, old))
+    first = jobs.wait(project, jobs.submit(project, "test.steps", {"n": 2}, "cli").id, 20)
+    assert jobs.answering(project, "test.steps", {"n": 2, "overwrite": False}).id == first.id
+    assert jobs.answering(project, "test.steps", {"n": 2, "overwrite": True}) is None
+    assert jobs.answering(project, "test.steps", {"n": 2, "dt": 0.01}) is None
+    assert jobs.answering(project, "test.steps", {"n": 3}) is None
+    # The newest job writing the output answers, or none.
+    second = jobs.submit(project, "test.steps", {"n": 2, "dt": 0.01, "overwrite": True}, "cli")
+    assert jobs.wait(project, second.id, 20).status == "done"
+    assert jobs.answering(project, "test.steps", {"n": 2}) is None
+    assert jobs.answering(project, "test.steps", {"n": 2, "dt": 0.01}).id == second.id
+    project.commit(lambda f: setattr(f.gpu, "batch", [1]))
+    assert jobs.answering(project, "test.steps", {"n": 2, "dt": 0.01}) is None
+    os.utime(project.path, (old, old))
+    assert jobs.answering(project, "test.steps", {"n": 2, "dt": 0.01}).id == second.id
+    (project.work_dir / "artifacts/steps2.txt").unlink()
+    assert jobs.answering(project, "test.steps", {"n": 2, "dt": 0.01}) is None
+
+
 def test_the_eta_leaves_out_a_share_reported_at_once(project):
     # Half the job reported before any step ran, then 4 steps of dt: after
     # step 1, 3 steps remain.

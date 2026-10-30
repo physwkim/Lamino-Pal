@@ -25,7 +25,7 @@ def _eta(s: float | None) -> str:
 
 class JobsWidget(qt.QWidget):
     """Every job of the project, newest first, polled; `ended` carries each
-    job this window submitted once it ends."""
+    job answering this window's submits once it ends."""
 
     ended = qt.Signal(object)
 
@@ -50,7 +50,8 @@ class JobsWidget(qt.QWidget):
 
     def track(self, st: JobState) -> None:
         self._mine.add(st.id)
-        self.poll()
+        # After the submitter has its id: a done job ends on this poll.
+        qt.QTimer.singleShot(0, self.poll)
 
     def poll(self) -> None:
         states = jobs.list_(self.project)[::-1]

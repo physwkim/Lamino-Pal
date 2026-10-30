@@ -207,6 +207,11 @@ fbp다). scan, geometry,
 MCP가 같은 job을 본다. 상태는 `work_dir/jobs/<id>/state.json`(pid = pgid, pid
 재사용을 가리는 /proc starttime, op, params, progress, eta, result)에 있다.
 params와 출력 경로는 제출할 때 검사하고, 대기 중인 job과 같은 출력도 그때 거절한다.
+GUI는 있는 출력을 덮어쓰지 않는 제출에 그 출력을 마지막으로 쓴 job이 답할 수 있으면
+새 job 대신 그 job을 보인다(`jobs.answering`). 그러려면 그 job이 done이고, params가
+overwrite만 빼고 같고, op가 돌며 읽는 것(project 파일, scan stack, 입력 파일)이 그
+job 제출 뒤에 바뀌지 않았어야 한다. job은 group의 z_band 같은 값을 돌 때 읽기
+때문이다. job은 마이크로초까지 적은 `created` 순서로 정렬된다.
 
 - `recon.run`은 submodule에서 빌드한 `tomoxide` 바이너리를 절대 경로로 실행한다
   (`--config` = `[recon]`, `--center` = `units.center_for_scan`, `--lamino_angle`,
