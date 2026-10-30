@@ -950,6 +950,19 @@ def test_a_viewers_docks_leave_the_window_its_size(app, win):
         assert (win.width(), win.height()) == (1600, 1000), name
 
 
+def test_the_window_fits_a_laptops_screen_and_a_tab_too_big_for_it_scrolls(app, win):
+    assert win.minimumSizeHint().width() <= 1280 and win.minimumSizeHint().height() <= 720
+    win.resize(1280, 720)
+    win.show_tab("Export")
+    pump(app, 0.2)
+    et = win.tabs["Export"]
+    assert et.width() >= et.minimumSizeHint().width() > et.parentWidget().width()
+    assert et.parentWidget().parentWidget().horizontalScrollBar().maximum() > 0
+    # The docks under the tabs ask a strip, three rows of jobs; the tabs take the rest.
+    t = win.jobs.table
+    assert t.viewport().height() == 3 * t.verticalHeader().defaultSectionSize()
+
+
 def test_a_preview_result_and_the_focus_plot_leave_the_views_their_height(app, win):
     win.resize(1600, 1000)
     pt, vt = win.tabs["Preview"], win.tabs["Volume"]

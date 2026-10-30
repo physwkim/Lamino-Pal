@@ -83,6 +83,20 @@ class _Scroll(qt.QScrollArea):
         return super().eventFilter(obj, event)
 
 
+class _Page(qt.QScrollArea):
+    """A tab, scrolled once the window is smaller than it: three graphs side
+    by side would hold the window wider than a laptop's screen. Asks for the
+    tab's size, not a scroll area's 24 lines at most, or the docks under the
+    tabs take the rest."""
+
+    def __init__(self, tab: qt.QWidget):
+        super().__init__(widgetResizable=True, frameShape=qt.QFrame.NoFrame)
+        self.setWidget(tab)
+
+    def sizeHint(self) -> qt.QSize:
+        return self.widget().sizeHint()
+
+
 class MainWindow(qt.QMainWindow):
     # The group, scan or volume in view changed.
     context_changed = qt.Signal()
@@ -121,7 +135,7 @@ class MainWindow(qt.QMainWindow):
         for cls in TABS:
             tab = cls(self)
             self.tabs[cls.NAME] = tab
-            getattr(self, f"layout{cls.NAME}").addWidget(tab)
+            getattr(self, f"layout{cls.NAME}").addWidget(_Page(tab))
             # Each its own: a stack is as tall as its tallest page.
             self.stackParams.addWidget(self._scroll(tab.controls))
         self.tabWidget.currentChanged.connect(self._tab_changed)

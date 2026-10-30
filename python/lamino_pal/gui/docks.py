@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 
 from silx.gui import qt
 
@@ -49,6 +50,14 @@ class JobsWidget(qt.QWidget):
         self.timer = qt.QTimer(self)
         self.timer.timeout.connect(self.poll)
         self.timer.start(POLL_MS)
+
+    def sizeHint(self) -> qt.QSize:
+        """Three rows, the newest jobs: the window gives a dock what it asks,
+        and the tabs, which scroll, the rest."""
+        t = self.table
+        rows = t.horizontalHeader().sizeHint().height() + 3 * t.verticalHeader().defaultSectionSize()
+        h = rows + 2 * t.frameWidth() + self.layout().spacing() + self.cancel.sizeHint().height()
+        return qt.QSize(super().sizeHint().width(), h)
 
     def track(self, st: JobState) -> None:
         self._mine.add(st.id)
@@ -104,6 +113,11 @@ class LogWidget(qt.QPlainTextEdit):
         self.timer.timeout.connect(self.poll)
         self.timer.start(POLL_MS)
         self.poll()
+
+    def sizeHint(self) -> qt.QSize:
+        """Three lines, as the jobs tabbed with it ask three rows."""
+        h = 3 * self.fontMetrics().lineSpacing() + 2 * (self.frameWidth() + self.document().documentMargin())
+        return qt.QSize(super().sizeHint().width(), math.ceil(h))
 
     def poll(self) -> None:
         if not self.path.exists():
