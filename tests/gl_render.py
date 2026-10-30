@@ -81,6 +81,34 @@ def test_a_camera_set_by_hand_is_kept_as_its_canvas_is_first_drawn(app):
         v.close()
 
 
+@pytest.mark.parametrize("painted", [False, True])
+def test_layers_added_to_a_grid_after_others_were_drawn_are_fit_to_it(app, painted):
+    v = Viewer("t")
+    v.resize(900, 300)
+    v.setAttribute(qt.Qt.WA_DontShowOnScreen)
+    v.show()
+    # Align's rings, drawn, then its sweep: napari fits on the first layer,
+    # to a grid of one.
+    v.model.add_image(np.ones((30, 50), "f4"), name="mean")
+    pump(app, 0.2)
+    v.clear()
+    v.model.grid.enabled = True
+    for i in range(9):
+        v.model.add_image(np.ones((32, 32), "f4"), name=f"c {i}")
+    if painted:
+        # A draw before the event loop rebuilds the scene.
+        v.qt_viewer.canvas.native.repaint()
+    pump(app, 0.2)
+    cam = v.model.camera
+    try:
+        shown = cam.zoom, cam.center
+        v.model.reset_view()
+        assert (cam.zoom, cam.center) == shown
+    finally:
+        v.close_canvas()
+        v.close()
+
+
 def fill(img: np.ndarray) -> tuple[float, float]:
     """The height and width of what `img` shows on its black ground, as
     fractions of its own."""
