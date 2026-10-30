@@ -22,7 +22,15 @@ from lamino_pal.ops.registry import Result
 from lamino_pal.ops.volume import data, provenance
 from lamino_pal.render import window
 
-RENDERING = ("mip", "attenuated_mip", "translucent", "iso", "average", "minip")
+# What each rendering draws along a ray; None draws the voxels themselves.
+RENDERING = {
+    "mip": np.max,
+    "attenuated_mip": np.max,
+    "translucent": None,
+    "iso": None,
+    "average": np.mean,
+    "minip": np.min,
+}
 # The axes each viewer's slider and plane are: the volume's [z, y, x] transposed.
 VIEWS = {"z": (0, 1, 2), "y": (1, 0, 2), "x": (2, 0, 1)}
 
@@ -39,6 +47,13 @@ def binned(path: Path) -> Path | None:
         return path
     sib = path.with_name(f"{path.stem}_binned.h5")
     return sib if sib.exists() else None
+
+
+def window3d(d: np.ndarray, rendering: str) -> tuple[float, float]:
+    """The window of what `rendering` draws of `d` seen down z, as the 3D view
+    resets to: its projection, or its middle slice when it draws the voxels."""
+    ray = RENDERING[rendering]
+    return window(d[len(d) // 2] if ray is None else ray(d, axis=0))
 
 
 def _fill(v, name: str, shapes: list[np.ndarray], kind: str) -> None:
@@ -105,8 +120,8 @@ class VolumeTab(Tab):
         band.addRow(button("Decide z band", self.decide_band, "the slices above, inclusive, for the group"))
         view3d = self.section("3D")
         self.rendering = qt.QComboBox()
-        self.rendering.addItems(RENDERING)
-        self.rendering.currentTextChanged.connect(lambda t: self._set3d(rendering=t))
+        self.rendering.addItems(list(RENDERING))
+        self.rendering.currentTextChanged.connect(self._render)
         self.depiction = qt.QComboBox()
         self.depiction.addItems(("volume", "plane"))
         self.depiction.currentTextChanged.connect(lambda t: self._set3d(depiction=t))
@@ -318,17 +333,23 @@ class VolumeTab(Tab):
             return
         d = np.asarray(data(b), dtype=np.float32)
         k = 1 if b == self.path else 2
-        mid = d[d.shape[0] // 2]
         self.view3d.model.add_image(
             d,
             name="3D",
             scale=(k, k, k),
-            contrast_limits=window(mid),
+            contrast_limits=window3d(d, self.rendering.currentText()),
             colormap="gray",
             rendering=self.rendering.currentText(),
             depiction=self.depiction.currentText(),
         )
         self.view3d.model.reset_view()
+
+    def _render(self, rendering: str) -> None:
+        """The 3D layer drawn as `rendering`, in the window of what it draws."""
+        if "3D" in self.view3d.model.layers:
+            layer = self.view3d.model.layers["3D"]
+            layer.rendering = rendering
+            layer.contrast_limits = window3d(layer.data, rendering)
 
     def _set3d(self, **kw) -> None:
         if "3D" in self.view3d.model.layers:

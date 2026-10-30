@@ -216,12 +216,14 @@ Compare/Split 결과(표, 변형 레이어)는 위 입력을 바꾸거나 **Prev
 
 4. 3D: **Bin 2×2×2 for 3D**로 이 volume의 축소판을 만든다(작업). 끝나면 3D
    페이지에 `3D` 레이어가 생기고, **rendering**(mip 등)과 **depiction**
-   (volume/plane)을 고른다. 3D 페이지에서는 layer controls/list가 3D 레이어의
+   (volume/plane)을 고른다. contrast는 rendering이 z 방향으로 그리는 상(mip은
+   최댓값 투영)의 0.5–99.5% 구간이고, rendering을 바꾸면 다시 정해진다.
+   3D 페이지에서는 layer controls/list가 3D 레이어의
    것으로 바뀌고, Slices로 돌아가면 다시 z slice의 것(cross, fov)이 된다.
 
    ![3D](26-3d.png)
 
-5. 끌어서 돌리고 휠로 확대한다. 기본 contrast에서는 MIP가 하얗게 포화된다.
+5. 끌어서 돌리고 휠로 확대한다.
    **Save the view**는 지금 보이는 화면을 `artifacts/figures` 아래 PNG로 저장한다.
 
    ![3D 회전](27-3d-rotated.png)

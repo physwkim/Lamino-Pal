@@ -640,6 +640,24 @@ def test_the_volume_planes_follow_one_slider_once_and_3d_shows_the_binned_volume
         assert vt.view3d.model.dims.ndisplay == n
 
 
+def test_the_3d_window_is_that_of_what_its_rendering_draws(app, win):
+    with h5py.File(win.project.work_dir / "v.h5") as f:
+        vol = f["exchange/data"][()]
+    with h5py.File(win.project.work_dir / "v_binned.h5", "w") as f:
+        f["exchange/data"] = vol[::2, ::2, ::2]
+    win._select("volume", "v.h5")
+    vt = win.tabs["Volume"]
+    vt.pages.setCurrentIndex(1)
+    assert pump(app, 5, lambda: names(vt.view3d) == ["3D"])
+    layer = vt.view3d.model.layers["3D"]
+    for r, ray in (("mip", np.max), ("minip", np.min), ("average", np.mean)):
+        vt.rendering.setCurrentText(r)
+        lo, hi = layer.contrast_limits
+        p = ray(layer.data, axis=0)
+        # No more of it clipped than the window's percentiles clip.
+        assert (p < lo).mean() <= 0.01 and (p > hi).mean() <= 0.01, r
+
+
 def test_a_double_click_on_a_volume_plane_moves_the_cross_and_not_the_camera(app, win):
     win._select("volume", "v.h5")
     win.show_tab("Volume")
