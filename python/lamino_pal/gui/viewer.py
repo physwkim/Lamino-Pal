@@ -179,6 +179,7 @@ class Viewer(qt.QWidget):
         self.model.layers.events.removed.connect(lambda e: self._px.pop(e.value, None))
         # napari's: drag_to_zoom, Alt+drag, now _drag's.
         self.model.mouse_drag_callbacks[:] = [self._drag]
+        self.model.mouse_wheel_callbacks.append(self._wheel)
         # The camera before each box zoom, for Zoom Back.
         self._back: list[tuple[float, tuple]] = []
         self._menu = qt.QMenu(self)
@@ -297,6 +298,20 @@ class Viewer(qt.QWidget):
             return
         event.handled = True
         yield from gen
+
+    def _wheel(self, model: ViewerModel, event) -> None:
+        """In 3D, vispy's zoom, 1.1× a step, toward the point under the
+        cursor, as its 2D camera's is: its 3D camera's is to its center. With
+        a modifier the wheel is napari's, and vispy's camera never hears it."""
+        if model.dims.ndisplay != 3 or event.modifiers or not model.camera.mouse_zoom:
+            return
+        cam = model.camera
+        f = 1.1 ** event.delta[1]
+        center = np.asarray(cam.center, float)
+        at = np.asarray(event.position)[list(event.dims_displayed)]
+        cam.zoom *= f
+        cam.center = tuple(center + (1 - 1 / f) * (at - center))
+        event.handled = True
 
     def _pan(self, model: ViewerModel, event):
         """The point grabbed held under the cursor."""

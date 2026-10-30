@@ -390,6 +390,29 @@ def test_a_pan_keeps_the_point_grabbed_under_the_cursor(app, ndisplay, button, m
         v.close()
 
 
+@pytest.mark.parametrize("ndisplay", [2, 3])
+def test_a_wheel_step_zooms_toward_the_point_under_the_cursor(app, ndisplay):
+    v = shown(app, ndisplay)
+    cam = v.model.camera
+    try:
+        angles, zoom = cam.angles, cam.zoom
+        at = (420, 90)
+        grabbed = world(v, at)
+        cv = v.qt_viewer.canvas.native
+        p = qt.QPointF(*at)
+        step = qt.QWheelEvent(
+            p, cv.mapToGlobal(p), qt.QPoint(), qt.QPoint(0, 120), qt.Qt.NoButton, qt.Qt.NoModifier,
+            qt.Qt.NoScrollPhase, False,
+        )
+        qt.QApplication.sendEvent(cv, step)
+        pump(app, 0.1)
+        assert cam.zoom > zoom and cam.angles == pytest.approx(angles)
+        assert world(v, at) == pytest.approx(grabbed, abs=1e-2)
+    finally:
+        v.close_canvas()
+        v.close()
+
+
 def test_a_left_drag_still_turns_a_3d_view(app):
     v = shown(app, 3)
     try:
