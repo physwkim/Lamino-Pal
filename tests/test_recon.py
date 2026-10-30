@@ -130,8 +130,10 @@ def test_compare_keeps_each_variant_and_its_cnr(project, run_job):
     variants = [{}, {"filter_name": "shepp"}]
     roi = {"signal": (20, 30, 20, 30), "background": (34, 44, 34, 44)}
     params = {"tag": "s", "recipe": {"algorithm": "fourierrec"}, "variants": variants, **roi}
-    r = run_job(project, "recon.compare", params)
+    seen = []
+    r = run_job(project, "recon.compare", params, lambda f, m: seen.append(m))
     assert [v.label for v in r.variants] == ["recipe", "filter_name=shepp"]
+    assert seen[-1].startswith("filter_name=shepp: row ")
     meta, arrays = load_h5(r.artifacts[0])
     assert arrays["slice"].shape == (2, 64, 64) and arrays["xz"].shape[0] == 2
     for v, sl in zip(r.variants, arrays["slice"]):

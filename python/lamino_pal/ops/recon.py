@@ -109,15 +109,15 @@ def _planes(
     recipe: dict[str, Any],
     at: tuple[int, int, int],
     span: tuple[float, float],
-    half: str | None = None,
+    part: str | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """The slice, xz and yz planes through `at`, reporting progress over
-    `span` of the op's, of `half` of the projections when given."""
+    `span` of the op's, as its `part` when given."""
     lo, hi = span
 
     def on_rows(done: int, rh: int) -> None:
         msg = f"row {done}/{rh}"
-        ctx.progress(lo + (hi - lo) * done / rh, msg if half is None else f"{half} half: {msg}")
+        ctx.progress(lo + (hi - lo) * done / rh, msg if part is None else f"{part}: {msg}")
 
     c = units.center_for_scan(scan, p.center_px)
     return stack.planes(json.dumps(recipe), c, p.tilt_deg, at, on_rows)
@@ -332,7 +332,7 @@ def split(ctx: Context, p: SplitParams) -> SplitResult:
         half = stack.select(list(range(first, nproj, 2)))
         counts.append(half.shape[0])
         span = (0.05 + 0.475 * i, 0.05 + 0.475 * (i + 1))
-        sl, xz, _ = _planes(ctx, half, scan, p, p.recipe, (z, y, x), span, ("even", "odd")[i])
+        sl, xz, _ = _planes(ctx, half, scan, p, p.recipe, (z, y, x), span, f"{('even', 'odd')[i]} half")
         del half
         slices.append(sl)
         xzs.append(xz)
