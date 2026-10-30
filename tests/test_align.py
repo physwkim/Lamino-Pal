@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from conftest import DATA
 
-from lamino_pal import Refused, dispatch
+from lamino_pal import Refused, _core, dispatch, scans
 from lamino_pal.artifacts import load_h5
 from lamino_pal.project import Project, ZBand
 
@@ -50,6 +50,28 @@ def test_tilt_scan_needs_a_decided_center(project, run_job):
     _scan(project, "s", [0, 90, 180, 270])
     with pytest.raises(Refused, match="s has no decided center"):
         run_job(project, "align.tilt_scan", {"tag": "s"})
+
+
+def test_tilt_scan_and_center_compare_hand_tomoxide_the_jobs_cancel(project, run_job, monkeypatch):
+    _scan(project, "s", np.arange(16) * 22.5, shape=(8, 32))
+    load, given = scans.stack, []
+
+    class Spy:
+        def __init__(self, path):
+            self.stack = load(path)
+
+        def __getattr__(self, name):
+            return getattr(self.stack, name)
+
+        def tilt_scan(self, *args):
+            given.append(args[3])
+            return self.stack.tilt_scan(*args)
+
+    monkeypatch.setattr(scans, "stack", Spy)
+    cancel = _core.CancelToken()
+    run_job(project, "align.tilt_scan", {"tag": "s", "center_px": 32.0, "tilts_deg": [20.0]}, cancel=cancel)
+    run_job(project, "align.center_compare", {"tag": "s", "centers_px": [31.0, 32.0], "tilt_deg": 20.0}, cancel=cancel)
+    assert len(given) == 3 and all(c is cancel for c in given)
 
 
 @pytest.fixture(scope="module")

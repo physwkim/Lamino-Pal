@@ -420,21 +420,24 @@ impl Stack {
     /// reconstruction at that tilt. `on_tilt(focus_json, z, layer, xz)` runs
     /// after each tilt, `layer` being slice `z`, the band middle (one layer at
     /// every tilt), and `xz` [depth, x] the plane through the middle row; an
-    /// exception from it stops the scan and is raised here.
-    #[pyo3(signature = (center, tilts, band=None, on_tilt=None))]
+    /// exception from it stops the scan and is raised here. A fired `cancel`
+    /// stops it before the next tilt or at the next tile.
+    #[pyo3(signature = (center, tilts, band=None, cancel=None, on_tilt=None))]
     fn tilt_scan(
         &self,
         py: Python<'_>,
         center: f32,
         tilts: Vec<f32>,
         band: Option<((usize, usize), f32)>,
+        cancel: Option<&CancelToken>,
         on_tilt: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let band = band.map(|(z, tilt_deg)| SampleBand { z, tilt_deg });
+        let cancel = cancel.map(|c| &c.0);
         let mut raised = None;
         let r = py.detach(|| {
             self.0
-                .tilt_scan(center, &tilts, band, None, &mut |f, views| {
+                .tilt_scan(center, &tilts, band, cancel, &mut |f, views| {
                     let Some(cb) = &on_tilt else { return Ok(()) };
                     Python::attach(|py| -> PyResult<()> {
                         let (layer, xz) = (numpy(py, &views.layer)?, numpy(py, &views.xz)?);

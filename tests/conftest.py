@@ -28,10 +28,10 @@ def run_job():
     """Run a job op in-process as its job process will, with this process's
     GPU 0 as the project's batch GPU."""
 
-    def run(project, name, params, progress=None):
+    def run(project, name, params, progress=None, cancel=None):
         if project.data.gpu.batch != [0]:
             project.commit(lambda f: setattr(f.gpu, "batch", [0]))
-        return dispatch.run_job(name, params, project=project, caller="cli", progress=progress)
+        return dispatch.run_job(name, params, project=project, caller="cli", progress=progress, cancel=cancel)
 
     return run
 

@@ -263,7 +263,7 @@ def tilt_scan(ctx: Context, p: TiltScanParams) -> TiltScanResult:
         f = json.loads(f)
         ctx.progress(len(layers) / len(p.tilts_deg), f"tilt {f['tilt_deg']:g}: slice {z}, peak z {f['z_peak']}")
 
-    foci = json.loads(stack.tilt_scan(units.center_for_scan(scan, c), p.tilts_deg, band, on_tilt))
+    foci = json.loads(stack.tilt_scan(units.center_for_scan(scan, c), p.tilts_deg, band, ctx.cancel, on_tilt))
     curves = [f.pop("focus_by_z") for f in foci]
     r = TiltScanResult(center_px=c, tilts=[TiltFocus(**f, slice=z) for f, z in zip(foci, zs)], artifacts=[p.out])
     arrays = {"layer": np.stack(layers), "xz": _padded(xz), "focus_by_z": _padded(curves)}
@@ -331,7 +331,9 @@ def center_compare(ctx: Context, p: CompareParams) -> CompareResult:
     centers = []
     for c in p.centers_px:
         f = json.loads(
-            stack.tilt_scan(units.center_for_scan(scan, c), [tilt], band, lambda f, z, s, xz: shown.append((z, s)))
+            stack.tilt_scan(
+                units.center_for_scan(scan, c), [tilt], band, ctx.cancel, lambda f, z, s, xz: shown.append((z, s))
+            )
         )[0]
         z = shown[-1][0]
         curves.append(f["focus_by_z"])

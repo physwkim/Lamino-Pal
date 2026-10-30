@@ -119,6 +119,15 @@ def test_a_fired_cancel_stops_the_center_sweep(turn):
         s.center_sweep(20.0, sl, [15.5, 16.0], cancel)
 
 
+def test_a_fired_cancel_stops_the_tilt_scan(turn):
+    s = _core.Stack(turn)
+    assert len(json.loads(s.tilt_scan(16.0, [20.0], None, _core.CancelToken()))) == 1
+    cancel = _core.CancelToken()
+    cancel.cancel()
+    with pytest.raises(LaminoPalError, match="cancelled"):
+        s.tilt_scan(16.0, [20.0], None, cancel)
+
+
 def test_planes_cross_at_the_voxel(turn):
     s = _core.Stack(turn)
     recipe = json.dumps({"algorithm": "fourierrec"})
