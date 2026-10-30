@@ -485,6 +485,34 @@ def test_every_graph_names_its_axes_before_its_first_result(win):
             assert g.getXAxis().getLabel() != "X" and g.getYAxis().getLabel() != "Y", name
 
 
+def test_a_graph_at_its_least_size_wraps_its_title_and_keeps_a_plot(app, win):
+    from lamino_pal.gui.tabs.align import PICKED, TILT_FOCUS
+    from lamino_pal.gui.tabs.base import GRAPH_SIZE, PLOT_LEAST
+    from lamino_pal.mcp import figures
+
+    vt = win.tabs["Volume"]
+    p = vt.graph("least", "z", "focus")
+    del vt.graphs["least"]
+    p.show()
+    key = figures.shades_key(figures.shaded((372, 1089), [(116, 371)], (0, 115)))
+    marks = "peak (gray line), first and last slice (blue lines, draggable)"
+    window = "slices [372, 1089), every 8th: window [-0.00012, 0.00034] → 0–65535"
+    b = p.getBackend()
+    for title in ("", f"{TILT_FOCUS}; {PICKED}", f"{key}\n{marks}", window, "a long failure " * 30):
+        p.setGraphTitle(title)
+        # Drawn, its least height takes its title; drawn again at that size.
+        for _ in range(2):
+            p.resize(*GRAPH_SIZE)
+            pump(app, 0.1)
+            b.fig.canvas.draw()
+        assert p.width() == GRAPH_SIZE[0], title
+        text = b.fig.get_tightbbox(b.fig.canvas.get_renderer())
+        page = b.fig.bbox_inches.padded(0.01)
+        assert page.contains(*text.min) and page.contains(*text.max), title
+        assert min(b.ax.bbox.width, b.ax.bbox.height) >= PLOT_LEAST, title
+    p.close()
+
+
 def test_a_graph_at_the_windows_least_size_draws_all_its_text_and_a_plot(app, win):
     from lamino_pal.gui.tabs.align import PICKED, TILT_FOCUS
     from lamino_pal.ops.export import WindowResult

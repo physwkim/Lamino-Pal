@@ -4,8 +4,13 @@ runner."""
 
 from __future__ import annotations
 
+import math
+from functools import partial
 from typing import Any, Callable
 
+from matplotlib import rcParams
+from matplotlib.backend_bases import DrawEvent
+from matplotlib.text import Text
 from silx import config
 from silx.gui import qt
 from silx.gui.plot import Plot1D, PlotWidget
@@ -23,9 +28,35 @@ GOOD, WARN, BAD = "#070", "#b60", "#b00"
 # title and tick labels; its tight layout, read as a graph is made, fits them
 # to the text.
 config._MPL_TIGHT_LAYOUT = True
-# A graph's least size: its toolbar, position bar and colorbar, two lines of
-# title, its ticks and labels, and a plot 80 px or more each way.
-GRAPH_SIZE = (300, 270)
+# A graph's least size: its toolbar, position bar and colorbar, its ticks and
+# labels, and a plot PLOT_LEAST px or more each way; until it is drawn, with no
+# title.
+GRAPH_SIZE = (300, 228)
+PLOT_LEAST = 80
+
+
+def _wrap_width(title: Text) -> float:
+    """matplotlib's width to wrap a centered title at, twice the way to the
+    figure's nearer side, without its way to the figure's top: that is
+    negative while the title is above the figure, as it is before the layout
+    makes room, and matplotlib then gives every word a line."""
+    x = title.get_transform().transform(title.get_position())[0]
+    box = title.get_figure().get_window_extent()
+    return 2 * min(x - box.x0, box.x1 - x)
+
+
+def _hold_plot(p: PlotWidget, e: DrawEvent) -> None:
+    """A graph's least height is its bars, the text drawn around its plot with
+    the layout's pads, and PLOT_LEAST: its title wraps to more lines as it
+    narrows, a failure can take many, and an axis's ×10ⁿ pushes the title up.
+    Measured from the text, not the plot's place, which a layout too big for
+    the figure leaves where it was."""
+    b = p.getBackend()
+    fig = b.fig
+    pad = 2 * fig.get_layout_engine().get()["pad"] * rcParams["font.size"] / 72
+    text = fig.get_tightbbox(e.renderer).height + pad - b.ax.bbox.height / fig.dpi
+    ppi = b.height() / fig.get_figheight()
+    p.setMinimumHeight(p.height() - b.height() + math.ceil(text * ppi) + PLOT_LEAST)
 
 
 def badge(label: qt.QLabel, text: str, color: str | None = None) -> None:
@@ -96,6 +127,12 @@ class Tab(qt.QWidget):
         p.getXAxis().setLabel(x)
         p.getYAxis().setLabel(y)
         p.setMinimumSize(*GRAPH_SIZE)
+        # Its title wrapped at draw time, so the layout and the drawing agree,
+        # and its least height held to that drawing.
+        b = p.getBackend()
+        b.ax.title.set_wrap(True)
+        b.ax.title._get_wrap_line_width = partial(_wrap_width, b.ax.title)
+        b.mpl_connect("draw_event", partial(_hold_plot, p))
         self.graphs[title] = p
         return p
 
