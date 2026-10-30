@@ -61,19 +61,20 @@ group's z band.
 ## 3. Confirm by eye, without the metric
 
 `align_center_compare(tag, centers_px)` reconstructs each candidate fully and
-keeps its best slice in the band, each on its own p0.5–p99.5 window (a window
-from one volume applied to another saturates it into a fake-crisp binary
-look). At the right center particles are round; a few tens of pixels off they
-smear into elongated dashes in a swirl. Decide `center_px` on this, citing
-the figure.
+keeps its slice through the band's middle, each on its own p0.5–p99.5 window
+(a window from one volume applied to another saturates it into a fake-crisp
+binary look). At the right center particles are round; a few tens of pixels
+off they smear into elongated dashes in a swirl. Decide `center_px` on this,
+citing the figure.
 
 ## 4. Tilt, then a small refine only
 
 - `align_tilt_scan(tag, tilts_deg)` at the decided center keeps each tilt's
-  best slice in the band carried to that tilt and its xz plane. Decide the
-  tilt by eye on both. The focus value does not pick it: on the 261003 sample
-  it rose from 16° to 24° in one run and fell from 20° to 24° in the next,
-  while the xz planes agreed with the slices on 20°.
+  slice through the middle of the band carried to that tilt (one layer at
+  every tilt; the focus peak `z_peak` wanders across a thick band) and its xz
+  plane. Decide the tilt by eye on both. The focus value does not pick it: on
+  the 261003 sample it rose from 16° to 24° in one run and fell from 20° to
+  24° in the next, while the xz planes agreed with the slices on 20°.
 - Refine (center, tilt) only on a small grid around the prior. A sweep refines
   a prior; it does not find one: widening to ±40 px grew three lobes whose
   highest was the wrong one, while ±8 px around the rings' center returned

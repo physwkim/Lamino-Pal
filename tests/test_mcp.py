@@ -245,10 +245,10 @@ def test_slices_compared_by_eye_show_their_detail_zoomed_at_full_resolution():
     # stronger than it in the corners outside the disk.
     detail = ((yy + xx) % 2) * np.exp(-((yy - yc) ** 2 + (xx - xc) ** 2) / (2 * 60.0**2))
     noise = np.random.default_rng(0).normal(size=(n, n)) * (np.hypot(yy - n / 2, xx - n / 2) > 0.5 * n)
-    best = np.stack([detail + noise, 2 * detail + noise, 3 * detail]).astype(np.float32)
-    tilts = [{"tilt_deg": t, "z_peak": 5, "focus": 1.0, "depth": 300} for t in (18, 20, 22)]
+    layer = np.stack([detail + noise, 2 * detail + noise, 3 * detail]).astype(np.float32)
+    tilts = [{"tilt_deg": t, "slice": 6, "z_peak": 5, "focus": 1.0, "depth": 300} for t in (18, 20, 22)]
     xz = np.zeros((3, 300, n), np.float32)
-    image, caption = figures.render("align.tilt_scan", {"center_px": 504.0, "tilts": tilts}, {"best": best, "xz": xz})
+    image, caption = figures.render("align.tilt_scan", {"center_px": 504.0, "tilts": tilts}, {"layer": layer, "xz": xz})
     gap, s = 4, (1568 - 2 * 4) // 3
     y0, y1, x0, x1 = map(int, re.search(r"zoom \[(\d+):(\d+), (\d+):(\d+)\] at full", caption).groups())
     assert (y1 - y0, x1 - x0) == (s, s)
@@ -257,21 +257,24 @@ def test_slices_compared_by_eye_show_their_detail_zoomed_at_full_resolution():
     # Zooms in a row above the whole slices shrunk to s and the xz planes
     # shrunk alike, nothing scaled again.
     assert im.shape == (2 * s + round(300 * s / n) + 2 * gap, 3 * s + 2 * gap)
-    for i, a in enumerate(best):
+    for i, a in enumerate(layer):
         zoom = a[y0:y1, x0:x1]
         assert np.array_equal(im[:s, i * (s + gap) : i * (s + gap) + s], to_u8(zoom, window(zoom)))
-    assert caption.splitlines()[1].startswith("- tilt 18 deg, slice 5 (focus 1), zoom window [")
+    # The slice shown is the band middle, the same layer at every tilt; the
+    # focus peak is named beside it.
+    assert caption.startswith("Each tilt's slice through the band middle, one layer at every tilt, at center 504.00")
+    assert caption.splitlines()[1].startswith("- tilt 18 deg, slice 6 (focus 1, peak z 5), zoom window [")
 
 
 def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_below_its_slice():
     rng = np.random.default_rng(0)
-    best = rng.random((3, 64, 64), dtype="f4")
+    layer = rng.random((3, 64, 64), dtype="f4")
     depths = [30, 35, 40]
     xz = np.full((3, 40, 64), np.nan, np.float32)
     for x, d in zip(xz, depths):
         x[:d] = rng.random((d, 64), dtype="f4")
-    tilts = [{"tilt_deg": t, "z_peak": 5, "focus": 1.0, "depth": d} for t, d in zip((18, 20, 22), depths)]
-    image, caption = figures.render("align.tilt_scan", {"center_px": 504.0, "tilts": tilts}, {"best": best, "xz": xz})
+    tilts = [{"tilt_deg": t, "slice": 6, "z_peak": 5, "focus": 1.0, "depth": d} for t, d in zip((18, 20, 22), depths)]
+    image, caption = figures.render("align.tilt_scan", {"center_px": 504.0, "tilts": tilts}, {"layer": layer, "xz": xz})
     assert "and the xz plane through y=32 [z, x] over the tilt's whole depth below it" in caption.splitlines()[0]
     im = np.asarray(Image.open(io.BytesIO(image)))
     gap, top = 4, 2 * (64 + 4)

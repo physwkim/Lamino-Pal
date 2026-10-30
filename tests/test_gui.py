@@ -292,9 +292,12 @@ def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_under_its_slice(ap
     rng = np.random.default_rng(0)
     xz = np.full((2, 9, 8), np.nan, np.float32)
     xz[0, :7], xz[1] = rng.random((7, 8)), rng.random((9, 8))
-    tilts = [{"tilt_deg": t, "focus": 1.0, "z_peak": 2, "band": None, "depth": d} for t, d in ((19, 7), (21, 9))]
+    tilts = [
+        {"tilt_deg": t, "focus": 1.0, "z_peak": 2, "band": None, "depth": d, "slice": d // 2}
+        for t, d in ((19, 7), (21, 9))
+    ]
     out = win.project.work_dir / "tilts.h5"
-    save_h5(out, {}, best=rng.random((2, 8, 8), dtype="f4"), xz=xz)
+    save_h5(out, {}, layer=rng.random((2, 8, 8), dtype="f4"), xz=xz)
     result = {"center_px": 64.5, "tilts": tilts, "artifacts": [str(out)]}
     st = JobState(
         id="j", project="", op="align.tilt_scan", params={}, caller="gui", gpu=None, status="done", created="",

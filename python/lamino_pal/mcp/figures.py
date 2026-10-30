@@ -148,21 +148,29 @@ def _sweep(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
 
 @_figure("align.tilt_scan")
 def _tilts(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
-    labels = [f"tilt {t['tilt_deg']:g} deg, slice {t['z_peak']} (focus {t['focus']:.4g})" for t in r["tilts"]]
+    labels = [
+        f"tilt {t['tilt_deg']:g} deg, slice {t['slice']} (focus {t['focus']:.4g}, peak z {t['z_peak']})"
+        for t in r["tilts"]
+    ]
     xz = [p[: t["depth"]] for p, t in zip(a["xz"], r["tilts"])]
-    img, zoom, lines = _tiles(a["best"], labels, xz)
-    y = a["best"].shape[1] // 2
+    img, zoom, lines = _tiles(a["layer"], labels, xz)
+    y = a["layer"].shape[1] // 2
     return img, (
-        f"Each tilt's best slice at center {r['center_px']:.2f} px, left to right, {zoom}, and the xz plane"
-        f" through y={y} [z, x] over the tilt's whole depth below it, shrunk alike:\n{lines}"
+        f"Each tilt's slice through the band middle, one layer at every tilt, at center {r['center_px']:.2f} px,"
+        f" left to right, {zoom}, and the xz plane through y={y} [z, x] over the tilt's whole depth below it,"
+        f" shrunk alike:\n{lines}"
     )
 
 
 @_figure("align.center_compare")
 def _centers(r: dict[str, Any], a: Arrays) -> tuple[np.ndarray, str]:
-    labels = [f"center {c['center_px']:.2f} px, slice {c['z_peak']} (focus {c['focus']:.4g})" for c in r["centers"]]
-    img, zoom, lines = _tiles(a["best"], labels)
-    return img, f"Each center's best slice at tilt {r['tilt_deg']:g}, left to right, {zoom}:\n{lines}"
+    labels = [
+        f"center {c['center_px']:.2f} px, slice {c['slice']} (focus {c['focus']:.4g}, peak z {c['z_peak']})"
+        for c in r["centers"]
+    ]
+    img, zoom, lines = _tiles(a["layer"], labels)
+    head = f"Each center's slice through the band middle at tilt {r['tilt_deg']:g}, left to right"
+    return img, f"{head}, {zoom}:\n{lines}"
 
 
 @_figure("recon.preview", "volume.ortho")

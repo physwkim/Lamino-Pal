@@ -97,7 +97,10 @@ def test_tilt_scan_carries_the_band_to_each_tilt(mount, run_job):
     assert seen[-3:] == pytest.approx([1 / 3, 2 / 3, 1.0])
     meta, arrays = load_h5(r.artifacts[0])
     assert r.artifacts[0].endswith("artifacts/step1000_tilts_cgroup_t18-22.h5")
-    assert meta["center_px"] == 1008.5 and arrays["best"].shape == (3, 1024, 1024)
+    assert meta["center_px"] == 1008.5 and arrays["layer"].shape == (3, 1024, 1024)
+    # Each tilt shows its band's middle, one layer at every tilt, not z_peak.
+    assert [t.slice for t in r.tilts] == [504, 510, 517] == [sum(t.band) // 2 for t in r.tilts]
+    assert [t["slice"] for t in meta["tilts"]] == [504, 510, 517]
     # Each tilt's xz plane and focus curve over its own depth, NaN below it;
     # the curves stay out of the result.
     assert (arrays["xz"].shape, arrays["focus_by_z"].shape) == ((3, 1106, 1024), (3, 1106))
@@ -109,12 +112,14 @@ def test_tilt_scan_carries_the_band_to_each_tilt(mount, run_job):
 
 
 @pytest.mark.golden
-def test_center_compare_keeps_each_centers_best_slice(mount, run_job):
+def test_center_compare_keeps_each_centers_band_middle_slice(mount, run_job):
     _group(mount, ["step1000"], center_px=1008.5, z_band=ZBand(z=(420, 600), bin=2, tilt_deg=20.0, depth=1090))
     r = run_job(mount, "align.center_compare", {"tag": "step1000", "centers_px": [1008.5, 976.11]})
     assert [(c.center_px, c.band) for c in r.centers] == [(1008.5, (420, 600)), (976.11, (420, 600))]
     assert all(420 <= c.z_peak < 600 for c in r.centers)
+    # The slice center_sweep scores at this tilt, shown for every center.
+    assert [c.slice for c in r.centers] == [510, 510]
     meta, arrays = load_h5(r.artifacts[0])
-    assert arrays["best"].shape == (2, 1024, 1024) and meta["tilt_deg"] == 20.0
+    assert arrays["layer"].shape == (2, 1024, 1024) and meta["tilt_deg"] == 20.0
     assert arrays["focus_by_z"].shape == (2, 1090)
     assert all("focus_by_z" not in c for c in meta["centers"])

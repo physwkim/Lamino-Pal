@@ -81,7 +81,7 @@ class AlignTab(Tab):
         tilt = self.section("3. Tilt")
         self.tilts = qt.QLineEdit("16 18 20 22 24")
         tilt.addRow("tilts °", self.tilts)
-        tilt.addRow(button("Tilt scan", self.tilt_scan, "each tilt's best slice, by the group's center (job)"))
+        tilt.addRow(button("Tilt scan", self.tilt_scan, "each tilt's band-middle slice, by the group's center (job)"))
         tilt.addRow(button("Decide selected tilt", self.decide_tilt))
         self.panel.addStretch(1)
 
@@ -293,11 +293,11 @@ class AlignTab(Tab):
             return
         self._job = st
         _, arrays = load_h5(st.result["artifacts"][0])
-        best = arrays["best"]
+        layer = arrays["layer"]
         if st.op == "align.tilt_scan":
             self._show_mode("tilts")
             rows = st.result["tilts"]
-            for t, a in zip(rows, best):
+            for t, a in zip(rows, layer):
                 self._layer(f"tilt {t['tilt_deg']:g}", a, tilt_deg=t["tilt_deg"])
             for t, a in zip(rows, arrays["xz"]):
                 self._layer(f"xz {t['tilt_deg']:g}", a[: t["depth"]], tilt_deg=t["tilt_deg"])
@@ -306,17 +306,18 @@ class AlignTab(Tab):
             self.plot.setGraphTitle(TILT_FOCUS)
             self.plot.getXAxis().setLabel("tilt °")
             self.verdict.setText(
-                f"job {st.id}: each tilt's best slice at center {st.result['center_px']:.2f} px, its xz plane below"
+                f"job {st.id}: each tilt's band-middle slice at center {st.result['center_px']:.2f} px,"
+                " its xz plane below"
             )
         else:
             self._show_mode("centers")
             rows = st.result["centers"]
-            for c, a in zip(rows, best):
+            for c, a in zip(rows, layer):
                 self._layer(f"c {c['center_px']:.2f}", a, center_px=c["center_px"])
             x = [c["center_px"] for c in rows]
             self.plot.addCurve(x, [c["focus"] for c in rows], legend="focus", symbol="o", color="black")
             self.plot.getXAxis().setLabel("center px (full resolution)")
-            self.verdict.setText(f"job {st.id}: each center's best slice at tilt {st.result['tilt_deg']:g}°")
+            self.verdict.setText(f"job {st.id}: each center's band-middle slice at tilt {st.result['tilt_deg']:g}°")
 
     def decide_tilt(self) -> None:
         if self.mode != "tilts" or self._job is None:

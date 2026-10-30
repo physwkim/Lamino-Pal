@@ -323,9 +323,10 @@ tilt ✓, z-band ✓, 재구성 n/m. 상태는 project에서 계산하고 따로
      selected center"를 눌러서 한다(고르기만으로는 정하지 않는다). Railed면
      "범위 넓히기" 버튼을 낸다. 그 결과 slice가 비어 있으면(flat) z-band 경고를
      띄운다.
-   - **Tilt.** tilt 목록으로 job을 돌린다. tilt마다 best-focus slice를 grid 윗줄에,
-     그 tilt의 xz plane(가운데 row, 전체 depth)을 아랫줄에 놓는다. tomoxide
-     `lamino_tilt_scan`이 streaming 중에 xz를 모아 `TiltViews`로 넘긴다. focus curve는
+   - **Tilt.** tilt 목록으로 job을 돌린다. tilt마다 band 중간 slice(모든 tilt에서
+     같은 층)를 grid 윗줄에, 그 tilt의 xz plane(가운데 row, 전체 depth)을 아랫줄에
+     놓는다. tomoxide `lamino_tilt_scan`이 streaming 중에 그 층과 xz를 모아
+     `TiltViews`로 넘긴다. focus curve는
      "참고용: tilt에 따른 경향이 run마다 달라 판단 근거 아님"으로 표시하고, 결정은
      layer를 고르고 "Decide selected tilt"를 눌러 eye로 한다.
      ALIGNMENT §6의 실패 방법은 메뉴에 두지 않는다.
