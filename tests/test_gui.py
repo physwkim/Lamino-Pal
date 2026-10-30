@@ -347,6 +347,18 @@ def test_the_volume_planes_follow_one_slider_once_and_3d_shows_the_binned_volume
         assert vt.view3d.model.dims.ndisplay == n
 
 
+def test_the_fov_disk_is_centered_on_the_z_slice(app, win):
+    win._select("volume", "v.h5")
+    vt = win.tabs["Volume"]
+    assert pump(app, 20, lambda: vt._fov is not None)
+    _, ny, nx = vt.shape
+    rad = vt._fov.arrays["radius"][vt.at[0]]
+    corners = vt.views["z"].model.layers["fov"].data[0]
+    assert rad > 0
+    center = np.array([ny / 2, nx / 2])
+    np.testing.assert_allclose([corners.min(0), corners.max(0)], [center - rad, center + rad])
+
+
 def test_the_export_slices_follow_the_band_and_keep_a_hand_edit(app, win):
     win._select("volume", "v.h5")
     ex = win.tabs["Export"]

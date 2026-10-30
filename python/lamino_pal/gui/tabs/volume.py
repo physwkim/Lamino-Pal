@@ -235,8 +235,8 @@ class VolumeTab(Tab):
         nz, ny, nx = self.shape
         z, _, _ = self.at
         rad = r.arrays["radius"][z]
-        cy, cx = ny / 2, nx / 2
-        disk = [np.array([[cy - rad, cx - rad], [cy + rad, cx + rad]])] if rad > 0 else []
+        # napari reads an ellipse of two rows as its center and radii.
+        disk = [np.array([[ny / 2, nx / 2], [rad, rad]])] if rad > 0 else []
         _fill(self.views["z"], "fov", disk, "ellipse")
         rows = [] if r.full_z is None else list(r.full_z)
         for axis in ("y", "x"):
