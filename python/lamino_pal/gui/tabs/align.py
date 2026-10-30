@@ -20,6 +20,9 @@ from lamino_pal.render import GAP, grid, origins, png, to_u8, window
 TRUSTWORTHY = 8.0  # ring prominence, `align.rings`
 OPEN_ARC = "open arc — ring 무효 (README: 462–467, 40 px 오차)"
 TILT_FOCUS = "참고용: tilt에 따른 경향이 run마다 달라 판단 근거 아님"
+# The graph's markers are named in its title: silx writes a marker's text at
+# the plot's top, where the texts of close markers overlap.
+PICKED = "picked (blue)"
 
 
 def _opt(edit: qt.QLineEdit) -> float | None:
@@ -181,7 +184,7 @@ class AlignTab(Tab):
         else:
             model.layers["frames"].edge_color = ["blue" if x == v else "transparent" for x in self._values]
         self.plot.removeMarker("picked")
-        self.plot.addXMarker(v, legend="picked", text="picked", color="blue")
+        self.plot.addXMarker(v, legend="picked", color="blue")
 
     def _stepped(self, event=None) -> None:
         # The slider moved: its candidate picked.
@@ -292,9 +295,10 @@ class AlignTab(Tab):
         model.text_overlay.visible = True
         self._choose(self._values[v.index])
         self.plot.addCurve(r.candidates_px, r.focus, legend="focus", symbol="o", color="black")
-        self.plot.addXMarker(v.center_px, legend="best", text="best", color="green")
+        self.plot.addXMarker(v.center_px, legend="best", color="green")
         for x in v.rivals:
-            self.plot.addXMarker(x.center_px, legend=f"rival {x.index}", text="rival", color="orange")
+            self.plot.addXMarker(x.center_px, legend=f"rival {x.index}", color="orange")
+        self.plot.setGraphTitle(", ".join(["best (green)", *(["rivals (orange)"] if v.rivals else []), PICKED]))
         self.plot.getXAxis().setLabel("center px (full resolution)")
         self.plot.getYAxis().setLabel("focus")
         head = f"{v.kind}: center {v.center_px:.2f} px on slice {r.slice} at tilt {r.tilt_deg:g}°"
@@ -390,7 +394,7 @@ class AlignTab(Tab):
             )
             x = [t["tilt_deg"] for t in rows]
             self.plot.addCurve(x, [t["focus"] for t in rows], legend="focus", symbol="o", color="gray")
-            self.plot.setGraphTitle(TILT_FOCUS)
+            self.plot.setGraphTitle(f"{TILT_FOCUS}; {PICKED}")
             self.plot.getXAxis().setLabel("tilt °")
             self.verdict.setText(
                 f"job {st.id}: each tilt's band-middle slice at center {st.result['center_px']:.2f} px,"
@@ -402,6 +406,7 @@ class AlignTab(Tab):
             self._montage([[(a, c["center_px"], f"{c['center_px']:.2f}") for c, a in zip(rows, layer)]], "center_px")
             x = [c["center_px"] for c in rows]
             self.plot.addCurve(x, [c["focus"] for c in rows], legend="focus", symbol="o", color="black")
+            self.plot.setGraphTitle(PICKED)
             self.plot.getXAxis().setLabel("center px (full resolution)")
             self.verdict.setText(f"job {st.id}: each center's band-middle slice at tilt {st.result['tilt_deg']:g}°")
 

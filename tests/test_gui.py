@@ -27,7 +27,7 @@ from napari._vispy.utils.visual import create_vispy_overlay
 from napari.layers import Image
 from PIL import Image as PILImage
 from silx.gui import qt
-from silx.gui.plot.items import Shape
+from silx.gui.plot.items import MarkerBase, Shape
 from test_recon import _scan
 from vispy.app.canvas import MouseEvent
 
@@ -452,6 +452,20 @@ def test_the_slider_or_a_click_on_the_plot_picks_a_sweep_candidate(app, win):
     assert np.array_equal(np.asarray(cited), to_u8(frames[3], window(frames[2])))
 
 
+def test_a_graphs_markers_are_named_in_its_title_not_on_the_plot_where_close_ones_overlap(app, win):
+    at, _ = _ambiguous_sweep(app, win)
+    vt = win.tabs["Volume"]
+    r = FocusResult(shape=(150, 8, 8), step=1, peak_z=70, band=(70, 149), air=[], wrap=None)
+    vt._show_focus(r.with_arrays(focus=np.ones(150)))
+    # best and picked both at 65, the peak and z0 both at 70.
+    texts = {p: [m.getText() for m in p.getItems() if isinstance(m, MarkerBase)] for p in (at.plot, vt.plot)}
+    assert texts == {at.plot: [""] * 3, vt.plot: [""] * 3}
+    assert at.plot.getGraphTitle() == "best (green), rivals (orange), picked (blue)"
+    assert vt.plot.getGraphTitle() == (
+        "suggested band [70, 149] (gray); peak (gray line), first and last slice (blue lines, draggable)"
+    )
+
+
 def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_under_its_slice(app, win):
     rng = np.random.default_rng(0)
     xz = np.full((2, 9, 8), np.nan, np.float32)
@@ -643,7 +657,9 @@ def test_the_focus_curve_shades_the_band_air_and_z_wrap(app, win):
     x = {s.getName(): s.getPoints()[:, 0] for s in vt.plot.getItems() if isinstance(s, Shape)}
     shapes = {k: (v.min(), v.max()) for k, v in x.items()}
     assert shapes == {"suggested band 0": (70, 149), "air 0": (30, 69), "z wrap 0": (0, 29)}
-    assert vt.plot.getGraphTitle() == "suggested band [70, 149] (gray), air [30, 69] (blue), z wrap [0, 29] (orange)"
+    assert vt.plot.getGraphTitle().startswith(
+        "suggested band [70, 149] (gray), air [30, 69] (blue), z wrap [0, 29] (orange); "
+    )
 
 
 @pytest.mark.parametrize("ndisplay, grid", [(2, True), (3, False)])

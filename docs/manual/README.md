@@ -96,17 +96,16 @@ spread를 보여 준다. 이 값을 쓰려면 **Decide center (rings)**를 누�
    정하고 **Sweep**을 누른다. 실제로 쓴 값이 `resolved: center 1008.11 px on
    slice 724 at tilt 20°`처럼 나온다.
 2. viewer에는 후보 중심마다의 slice가 쌓이고, 아래 그래프에는 중심별 focus
-   값과 best 표시가 나온다. 봉우리가 범위 끝에 걸리면 **범위 넓히기** 버튼이
-   나타나 두 배 범위로 다시 sweep한다.
+   값과 best(초록 선), 경쟁 후보(주황 선)가 나온다. 선의 이름은 그래프 제목에
+   색으로 적힌다. 봉우리가 범위 끝에 걸리면 **범위 넓히기** 버튼이 나타나 두
+   배 범위로 다시 sweep한다.
 
    ![center sweep](08-sweep.png)
 
 3. 후보는 슬라이더, 그래프 클릭 중 하나로 고른다. 고른 후보는 그래프에 파란
-   `picked` 표시로 나온다.
+   선(picked)으로 나온다.
 
    ![후보 고르기](09-pick.png)
-
-   > 주의: best와 picked가 가까우면 두 글자가 겹쳐 보인다.
 
 4. **Compare by eye**는 best와 그 경쟁 후보, 고른 후보를 각각 전체로 재구성해
    타일로 나란히 보여 준다(작업). 각 타일 안에 중심값이 붙는다. 타일이나
@@ -210,14 +209,14 @@ Compare/Split 결과(표, 변형 레이어)는 위 입력을 바꾸거나 **Prev
    ![십자 이동](24-cross.png)
 
 3. z band: **every n-th slice**를 정하고 **Focus by z**를 누르면 slice별 focus
-   그래프가 나오고 **first slice**, **last slice**가 채워진다. 값을 확인하거나
-   고친 뒤 **Decide z band**를 누르면 그 범위(양 끝 포함)가 group의 z band가
-   된다.
+   그래프가 나오고 **first slice**, **last slice**가 채워진다. 그래프의 회색
+   선은 focus 봉우리(peak), 두 파란 선은 first/last slice이며 끌어서 옮길 수
+   있다. 음영과 선의 뜻은 그래프 제목에 적힌다. 값을 확인하거나 고친 뒤
+   **Decide z band**를 누르면 그 범위(양 끝 포함)가 group의 z band가 된다.
 
    ![focus by z](25-focus-by-z.png)
 
-   > 주의: 그래프 제목과 ×10ⁿ 배율 글자가 위에서 잘리고, z0와 peak 표시 글자가
-   > 겹친다.
+   > 주의: 그래프 제목과 ×10ⁿ 배율 글자가 위에서 잘린다.
 
 4. 3D: **Bin 2×2×2 for 3D**로 이 volume의 축소판을 만든다(작업). 끝나면 3D
    페이지에 `3D` 레이어가 생기고, **rendering**(mip 등)과 **depiction**

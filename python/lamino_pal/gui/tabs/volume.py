@@ -258,7 +258,10 @@ class VolumeTab(Tab):
         self._focus = r
         self.plot.clear()
         spans = figures.shaded(r.band, r.air, r.wrap)
-        self.plot.setGraphTitle(figures.shades_key(spans))
+        # The markers named here: silx writes a marker's text at the plot's
+        # top, where z0's and the peak's overlap.
+        marks = "peak (gray line), first and last slice (blue lines, draggable)"
+        self.plot.setGraphTitle("; ".join(filter(None, (figures.shades_key(spans), marks))))
         f = r.arrays["focus"]
         top = max(f, default=0.0)
         for k, v in spans.items():
@@ -267,7 +270,7 @@ class VolumeTab(Tab):
                 self.plot.addShape((a, b), (0, top), legend=f"{k} {i}", shape="rectangle", color=color, z=0)
         z = np.arange(len(f)) * r.step
         self.plot.addCurve(z, f, legend="focus", color="black")
-        self.plot.addXMarker(r.peak_z, legend="peak", text="peak", color="gray")
+        self.plot.addXMarker(r.peak_z, legend="peak", color="gray")
         self.plot.getXAxis().setLabel("slice z")
         self.plot.getYAxis().setLabel("focus (mean |∇|²)")
         if r.band is not None:
@@ -279,7 +282,7 @@ class VolumeTab(Tab):
         if self._focus is None:
             return
         for name, s in (("z0", self.z0), ("z1", self.z1)):
-            self.plot.addXMarker(s.value(), legend=name, text=name, color="blue", draggable=True)
+            self.plot.addXMarker(s.value(), legend=name, color="blue", draggable=True)
 
     def _marker_moved(self, event: dict) -> None:
         if event.get("event") == "markerMoved" and event.get("label") in ("z0", "z1"):
