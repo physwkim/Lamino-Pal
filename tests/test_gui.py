@@ -12,6 +12,7 @@ os.environ["QT_API"] = "pyside6"
 
 import re
 import subprocess
+import sys
 import threading
 import time
 import warnings
@@ -1138,3 +1139,28 @@ def test_a_viewer_makes_its_canvas_when_first_shown_and_shows_its_docks_while_it
     vt.pages.setCurrentIndex(0)
     pump(app, 0.2)
     assert docks(vt.view3d) == [False, False] and docks(vt.views["z"]) == [True, True]
+
+
+def test_naparis_buttons_act_on_the_viewer_whose_layer_list_shows(app, win, monkeypatch):
+    from napari.layers.shapes._shapes_constants import Mode
+
+    raised = []
+    monkeypatch.setattr(sys, "excepthook", lambda t, e, tb: raised.append(e))
+    vt, pt = win.tabs["Volume"], win.tabs["Preview"]
+    win._select("volume", "v.h5")
+    win.show_tab("Volume")
+    pump(app, 0.2)
+    # The z slice's: the xz and yz views have no layer list.
+    vt.views["z"].qt_viewer.viewerButtons.gridViewButton.click()
+    assert vt.views["z"].model.grid.enabled and not vt.views["y"].model.grid.enabled
+    win.show_tab("Preview")
+    pump(app, 0.2)
+    pt._roi_layer()
+    qv = pt.view.qt_viewer
+    roi = pt.view.model.layers["ROI"]
+    # A layer's, on the active layer.
+    qv.controls.widgets[roi]._MODE_BUTTONS[Mode.SELECT].click()
+    assert roi.mode == "select"
+    qv.layerButtons.deleteButton.click()
+    assert "ROI" not in pt.view.model.layers
+    assert raised == [] and qv.viewerButtons.consoleButton.isHidden()

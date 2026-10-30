@@ -5,12 +5,15 @@ from __future__ import annotations
 
 import functools
 import gc
+import weakref
 from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
+from napari import viewer as napari_viewer
+from napari._app_model import get_app_model
 from napari._vispy.canvas import VispyCanvas
-from napari.components import ViewerModel
+from napari.components import LayerList, ViewerModel
 from napari.layers import Image, Layer, Shapes
 from napari.qt import QtViewer, get_stylesheet
 from napari.resources._icons import _theme_path
@@ -32,6 +35,32 @@ def _napari_style() -> str:
     for name in available_themes():
         qt.QDir.addSearchPath(f"theme_{name}", str(_theme_path(name)))
     return get_stylesheet("light", extra_variables={"font_size": f"{qt.QApplication.font().pointSize()}pt"})
+
+
+def _shown() -> ViewerModel | None:
+    """The viewer whose layer list shows, as its buttons and its layer
+    controls' do: those of the others are hidden."""
+    shown = [v.model for v in _viewers if v._qt_viewer is not None and v._qt_viewer.dockLayerList.isVisible()]
+    return shown[0] if len(shown) == 1 else None
+
+
+@functools.cache
+def _act_on_shown() -> None:
+    """napari's buttons run its actions on its Window's viewer, or that
+    viewer's active layer, which it gives them only from a Window: these
+    viewers have none, and act on the one shown."""
+    get_app_model().injection_store.register(
+        providers={
+            napari_viewer.Viewer: _shown,
+            ViewerModel: _shown,
+            Layer: lambda: None if (m := _shown()) is None else m.layers.selection.active,
+            LayerList: lambda: None if (m := _shown()) is None else m.layers,
+        }
+    )
+
+
+# Every Viewer made, for _shown.
+_viewers: weakref.WeakSet[Viewer] = weakref.WeakSet()
 
 
 class _Canvas(VispyCanvas):
@@ -204,6 +233,7 @@ class Viewer(qt.QWidget):
         self._name_modes()
         layout = qt.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        _viewers.add(self)
 
     @property
     def qt_viewer(self) -> QtViewer:
@@ -211,6 +241,9 @@ class Viewer(qt.QWidget):
         of a session's viewers are never shown."""
         if self._qt_viewer is None:
             qv = QtViewer(self.model, canvas_class=_Canvas)
+            _act_on_shown()
+            # Its console is a Window's.
+            qv.viewerButtons.consoleButton.hide()
             # napari 0.6.6 makes a layer's controls, and sets the 3D camera
             # depth, only as the layer is inserted: these layers were before.
             for layer in self.model.layers:
