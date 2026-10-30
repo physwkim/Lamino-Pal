@@ -731,14 +731,25 @@ def test_a_viewers_napari_buttons_and_its_docks_find_their_icons(app):
     v.close()
 
 
-def test_a_viewer_makes_its_canvas_when_first_shown(app, win):
+def docks(v):
+    """Whether viewer `v`'s layer controls and list show."""
+    return [d.isVisible() for d in (v.qt_viewer.dockLayerControls, v.qt_viewer.dockLayerList)]
+
+
+def test_a_viewer_makes_its_canvas_when_first_shown_and_shows_its_docks_while_it_is(app, win):
     at, vt = win.tabs["Align"], win.tabs["Volume"]
     assert not any(v._qt_viewer for t in win.tabs.values() for v in t.viewers)
     win.show_tab("Align")
     pump(app, 0.2)
-    assert at.view._qt_viewer and len(at.docks) == 2 and all(d.isVisible() for d in at.docks)
+    assert at.view._qt_viewer and docks(at.view) == [True, True]
     win._select("volume", "v.h5")
     pump(app, 0.2)
     # The 3D viewer is on a page not yet shown.
     assert [v._qt_viewer is not None for v in vt.viewers] == [True, True, True, False]
-    assert all(d.isVisible() for d in vt.docks) and not any(d.isVisible() for d in at.docks)
+    assert docks(vt.views["z"]) == [True, True] and docks(at.view) == [False, False]
+    vt.pages.setCurrentIndex(1)
+    pump(app, 0.2)
+    assert docks(vt.view3d) == [True, True] and docks(vt.views["z"]) == [False, False]
+    vt.pages.setCurrentIndex(0)
+    pump(app, 0.2)
+    assert docks(vt.view3d) == [False, False] and docks(vt.views["z"]) == [True, True]

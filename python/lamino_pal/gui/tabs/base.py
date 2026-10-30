@@ -62,7 +62,6 @@ class Tab(qt.QWidget):
         self.runner = win.runner
         self.controls = qt.QWidget()
         self.panel = qt.QVBoxLayout(self.controls)
-        self.docks: list[qt.QDockWidget] = []
         self.viewers: list[Viewer] = []
         self.graphs: dict[str, PlotWidget] = {}
 
@@ -75,10 +74,10 @@ class Tab(qt.QWidget):
 
     def viewer(self, title: str, docked: bool = True) -> Viewer:
         """A viewer of this tab; a docked one's layer list and controls show
-        in the window while this tab does, from when its canvas is made."""
+        in the window while it does, from when its canvas is made."""
         v = Viewer(title)
         if docked:
-            v.made.connect(lambda qv: self.win.attach_docks(self, qv))
+            v.made.connect(lambda qv: self.win.attach_docks(v, qv))
         self.viewers.append(v)
         return v
 

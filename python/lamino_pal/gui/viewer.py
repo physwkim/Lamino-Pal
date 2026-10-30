@@ -148,6 +148,8 @@ class _Canvas(VispyCanvas):
 class Viewer(qt.QWidget):
     # Its QtViewer was made.
     made = qt.Signal(object)
+    # It was shown or hidden, not by the window's minimizing.
+    shown = qt.Signal(bool)
 
     def __init__(self, title: str, parent: qt.QWidget | None = None):
         super().__init__(parent)
@@ -184,6 +186,13 @@ class Viewer(qt.QWidget):
         # Made to be shown.
         self.qt_viewer
         super().showEvent(event)
+        if not event.spontaneous():
+            self.shown.emit(True)
+
+    def hideEvent(self, event: qt.QHideEvent) -> None:
+        super().hideEvent(event)
+        if not event.spontaneous():
+            self.shown.emit(False)
 
     def close_canvas(self) -> None:
         if self._qt_viewer is not None:

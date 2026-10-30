@@ -179,22 +179,16 @@ class MainWindow(qt.QMainWindow):
 
     def _tab_changed(self, i: int) -> None:
         self.stackParams.setCurrentIndex(i)
-        self._show_docks()
 
-    def _show_docks(self) -> None:
-        """Each tab's docks shown while it is the current tab."""
-        cur = self.current_tab()
-        for tab in self.tabs.values():
-            for dock in tab.docks:
-                dock.setVisible(tab is cur)
-
-    def attach_docks(self, tab, qv) -> None:
-        """QtViewer `qv`'s layer controls and list beside the parameters,
-        shown while `tab` is."""
-        for dock in (qv.dockLayerControls, qv.dockLayerList):
+    def attach_docks(self, v, qv) -> None:
+        """Viewer `v`'s QtViewer `qv`'s layer controls and list beside the
+        parameters, shown while `v` is: a tab or page hides it."""
+        docks = (qv.dockLayerControls, qv.dockLayerList)
+        for dock in docks:
             self.addDockWidget(qt.Qt.RightDockWidgetArea, dock)
-            tab.docks.append(dock)
-        self._show_docks()
+            # Made before it is shown, or as it is: its show follows.
+            dock.hide()
+        v.shown.connect(lambda on: [d.setVisible(on) for d in docks])
 
     def _job_ended(self, st: JobState) -> None:
         if st.status == "failed":
