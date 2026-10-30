@@ -114,9 +114,9 @@ maturin cdylib, `abi3-py312`, feature `cuda`를 tomoxide로 전달. 의존: tomo
   (`.import.lock`) 돌며, tag 확인부터 commit까지 그 lock 안에 있다.
 - `bind`: tomoxide align API(`PreppedStack`, ring, register, `judge_sweep`)와
   필요한 projection만 읽어 prep하는 `prep::frames`의 얇은 wrapper. 무거운 호출은
-  `py.detach`로 GIL을 놓는다. center sweep은 `CancelToken`을 받아 angle chunk
-  사이에서 멈추고(그 앞의 filter는 끝까지 돈다), tilt scan은 tilt마다 부르는
-  callback이 예외를 내면 다음 tilt 전에 멈춘다. import progress callback은 GIL을 다시 잡고 호출하며 10 Hz로
+  `py.detach`로 GIL을 놓는다. center sweep은 `CancelToken`을 받아 filter tile과
+  angle chunk 사이에서, tilt scan은 tilt, stage chunk, 출력 tile 사이에서
+  멈추고, tilt scan은 tilt마다 부르는 callback이 예외를 내도 멈춘다. import progress callback은 GIL을 다시 잡고 호출하며 10 Hz로
   제한한다. 배열은 numpy로 복사해 반환한다(numpy crate의 ndarray 0.17과
   tomoxide의 0.16이 달라서; 프로세스 안에서만, MCP로는 나가지 않는다).
 - 오류는 `LaminoPalError` 하위 예외로 변환하며, guard 거부는 `Refused`(이유

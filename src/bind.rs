@@ -315,7 +315,7 @@ impl Stack {
 
     /// Output slice `slice` reconstructed at every centre of `centers`:
     /// `(frames [len(centers), ny, nx], focus per centre)`. A fired `cancel`
-    /// stops it at its next angle chunk; the filter before them runs whole.
+    /// stops it at its next filter tile or angle chunk.
     #[pyo3(signature = (tilt_deg, slice, centers, cancel=None))]
     fn center_sweep<'py>(
         &self,
@@ -421,7 +421,7 @@ impl Stack {
     /// after each tilt, `layer` being slice `z`, the band middle (one layer at
     /// every tilt), and `xz` [depth, x] the plane through the middle row; an
     /// exception from it stops the scan and is raised here. A fired `cancel`
-    /// stops it before the next tilt or at the next tile.
+    /// stops it at its next tilt, stage chunk or output tile.
     #[pyo3(signature = (center, tilts, band=None, cancel=None, on_tilt=None))]
     fn tilt_scan(
         &self,
