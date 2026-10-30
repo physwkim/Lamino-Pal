@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 from napari._vispy.canvas import VispyCanvas
 from napari.components import ViewerModel
-from napari.layers import Shapes
+from napari.layers import Layer, Shapes
 from napari.qt import QtViewer, get_stylesheet
 from napari.resources._icons import _theme_path
 from napari.utils.events import disconnect_events
@@ -335,13 +335,26 @@ class Viewer(qt.QWidget):
             layers.move(len(layers) - 1, over[0])
         return layer
 
+    def add_overlay(self, layer: Layer) -> Layer:
+        """`layer` drawn over the image, which stays the active layer: napari
+        activates each layer it inserts, and the layer controls then show the
+        overlay's tools, not the image's contrast. A layer to draw on is
+        activated by its caller."""
+        layers = self.model.layers
+        # napari 0.6.6's flag for its insert.
+        layers._activate_on_insert = False
+        try:
+            return self.model.add_layer(layer)
+        finally:
+            layers._activate_on_insert = True
+
     def add_outlines(self, data=None, *, px: float = 1.0, by_hand: bool = False, **kwargs) -> Shapes:
         """A shapes layer whose edges are `px` screen px wide at any zoom.
         napari's are as wide in data px, and GL draws one thinner than a
         screen px only where it covers a pixel's center: zoomed out, a line
         across the pixel rows is missing. Highlighted as napari's only when
         drawn `by_hand`."""
-        layer = self.model.add_layer((Shapes if by_hand else _Outlines)(data, **kwargs))
+        layer = self.add_overlay((Shapes if by_hand else _Outlines)(data, **kwargs))
         self._px[layer] = px
         # napari gives a shape set as data a width of 1.
         layer.events.data.connect(self._widen)

@@ -6,6 +6,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
+from napari.layers import Points, Shapes
 from silx.gui import qt
 
 from lamino_pal import scans, units
@@ -146,30 +147,32 @@ class AlignTab(Tab):
         self._values = [v for r in rows for _, v, _ in r]
         self._labels = [label for r in rows for _, _, label in r]
         self._key = key
-        model = self.view.model
-        img = model.add_image(grid(tiles, gap), name=self.mode, contrast_limits=(0, 255), colormap="gray")
+        self.view.model.add_image(grid(tiles, gap), name=self.mode, contrast_limits=(0, 255), colormap="gray")
         # Pixel i spans i ± 0.5: the frame's line runs mid-gap.
         e = (gap + 1) / 2
-        model.add_shapes(
-            [np.array([[y - e, x - e], [y + h - 1 + e, x + w - 1 + e]]) for y, x, h, w in self._tiles],
-            shape_type="rectangle",
-            name="frames",
-            edge_width=gap,
-            edge_color="transparent",
-            face_color="transparent",
+        self.view.add_overlay(
+            Shapes(
+                [np.array([[y - e, x - e], [y + h - 1 + e, x + w - 1 + e]]) for y, x, h, w in self._tiles],
+                shape_type="rectangle",
+                name="frames",
+                edge_width=gap,
+                edge_color="transparent",
+                face_color="transparent",
+            )
         )
         # A label in screen px hangs from its tile's corner into the tile
         # ("lower_left" of a point): the gaps are too narrow for it zoomed out.
-        model.add_points(
-            [(y - 0.5, x - 0.5) for y, x, _, _ in self._tiles],
-            name="labels",
-            size=0,
-            border_width=0,
-            face_color="transparent",
-            features={"label": self._labels},
-            text={"string": "{label}", "anchor": "lower_left", "color": "yellow", "size": 12},
+        self.view.add_overlay(
+            Points(
+                [(y - 0.5, x - 0.5) for y, x, _, _ in self._tiles],
+                name="labels",
+                size=0,
+                border_width=0,
+                face_color="transparent",
+                features={"label": self._labels},
+                text={"string": "{label}", "anchor": "lower_left", "color": "yellow", "size": 12},
+            )
         )
-        model.layers.selection.active = img
 
     def _choose(self, v: float) -> None:
         """`v` picked: the sweep's candidate showing it on the slider, or the

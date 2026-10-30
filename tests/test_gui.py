@@ -863,13 +863,33 @@ def test_an_image_made_after_outlines_goes_under_them_and_one_refilled_stays(app
     v.close()
 
 
+def test_overlays_leave_the_image_active_and_its_controls_shown(app, win):
+    from napari.layers import Image, Points
+
+    v = Viewer("t")
+    img = v.model.add_image(np.zeros((16, 16)))
+    v.add_outlines(name="o")
+    v.add_outlines(name="ROI", by_hand=True)
+    v.add_overlay(Points(name="p"))
+    assert v.model.layers.selection.active is img and set(v.model.layers.selection) == {img}
+    # Once made, the controls are the image's.
+    assert v.qt_viewer.controls.currentWidget() is v.qt_viewer.controls.widgets[img]
+    v.close()
+    # And in the window: the Volume planes under their fov and cross.
+    win._select("volume", "v.h5")
+    win.show_tab("Volume")
+    pump(app, 0.2)
+    for view in win.tabs["Volume"].views.values():
+        assert isinstance(view.model.layers.selection.active, Image)
+
+
 def test_outlines_are_highlighted_under_the_cursor_only_if_drawn_by_hand(app):
     v = Viewer("t")
     v.model.add_image(np.zeros((16, 16)))
     line = np.array([[8.0, 0], [8, 15]])
     for by_hand in (False, True):
         layer = v.add_outlines([line], shape_type="line", by_hand=by_hand)
-        assert v.model.layers.selection.active is layer
+        v.model.layers.selection.active = layer
         # The status bar's look up, as the cursor moves over it.
         assert layer.get_value((8, 4), world=True)[0] == 0
         assert (layer._outline_shapes()[0] is not None) == by_hand

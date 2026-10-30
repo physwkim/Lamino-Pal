@@ -402,6 +402,7 @@ def test_a_layer_drawing_by_hand_keeps_the_left_drag(app):
     cam = v.model.camera
     try:
         roi = v.add_outlines(by_hand=True)
+        v.model.layers.selection.active = roi
         roi.mode = "add_rectangle"
         before = cam.zoom, cam.center
         mouse(app, v, qt.Qt.LeftButton, (200, 100), (320, 180))
