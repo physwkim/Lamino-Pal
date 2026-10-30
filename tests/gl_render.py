@@ -33,7 +33,9 @@ def test_a_canvas_made_over_layers_draws_as_one_that_heard_them_inserted(app, nd
 
     def made(before: bool) -> np.ndarray:
         v = Viewer("t")
-        v.resize(600, 300)
+        # Not 600 wide: napari fits to a 600-wide canvas before it is made,
+        # and three tiles in a row fit the same at any height that width.
+        v.resize(900, 300)
         v.setAttribute(qt.Qt.WA_DontShowOnScreen)
         v.model.dims.ndisplay = ndisplay
         v.model.grid.enabled = ndisplay == 2
