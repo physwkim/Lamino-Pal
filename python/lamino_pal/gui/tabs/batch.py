@@ -31,6 +31,9 @@ class BatchTab(Tab):
         self.table.setHorizontalHeaderLabels(COLUMNS)
         self.table.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
         self.table.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+        # The header sizes the columns: a resize of its own would end the
+        # last one's stretch.
+        self.table.horizontalHeader().setSectionResizeMode(qt.QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.head = qt.QLabel(wordWrap=True)
         self.gpus = qt.QLabel()
@@ -127,7 +130,6 @@ class BatchTab(Tab):
                 items.append(item)
             rows.append(items)
         fill(self.table, rows)
-        self.table.resizeColumnsToContents()
 
     def _locks(self) -> None:
         held = [f"GPU {n} {'busy' if dispatch.gpu_busy(n) else 'free'}" for n in self.project.data.gpu.batch]

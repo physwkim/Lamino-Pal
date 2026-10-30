@@ -361,6 +361,18 @@ def test_a_batch_row_whose_final_a_job_is_writing_reads_that_jobs_status(app, wi
     assert pump(app, 3, lambda: tab.table.item(0, 6).text() == "to make")
 
 
+def test_the_batch_state_column_still_fills_the_table_after_a_refresh(app, win):
+    win.set_context(tag="s")
+    win.show_tab("Batch")
+    tab = win.tabs["Batch"]
+    pump(app, 0.1)
+    tab.refresh()
+    pump(app, 0.1)
+    h = tab.table.horizontalHeader()
+    state = h.count() - 1
+    assert h.sectionViewportPosition(state) + h.sectionSize(state) == tab.table.viewport().width()
+
+
 def selected(table: qt.QTableWidget) -> list[str]:
     return [table.item(i.row(), 0).text() for i in table.selectionModel().selectedRows()]
 
