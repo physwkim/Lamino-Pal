@@ -2,6 +2,7 @@
 around them. What the canvases draw is test_render.py's."""
 
 import gc
+import io
 import os
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
@@ -12,8 +13,10 @@ os.environ["QT_API"] = "pyside6"
 import re
 import threading
 import time
+import warnings
 
 import h5py
+import matplotlib
 import numpy as np
 import PySide6.QtCore  # noqa: F401  # silx takes the binding napari's qtpy is pinned to
 import pytest
@@ -455,6 +458,23 @@ def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_under_its_slice(ap
     _click(at.view, 20, 15)
     assert at._picked("tilt_deg") == 21 and framed(at.view) == ["21°", "xz 21°"]
     assert at.plot._getMarker("picked").getXPosition() == 21
+
+
+def test_a_graph_draws_its_hangul_title_in_a_font_that_has_it(app, scene, monkeypatch):
+    from lamino_pal.gui.tabs.align import TILT_FOCUS
+    from lamino_pal.gui.window import MainWindow
+
+    if not qt.QFontDatabase.families(qt.QFontDatabase.WritingSystem.Korean):
+        pytest.skip("no font here has Hangul")
+    monkeypatch.setitem(matplotlib.rcParams, "font.family", ["sans-serif"])
+    w = MainWindow(scene)
+    plot = w.tabs["Align"].plot
+    plot.setGraphTitle(TILT_FOCUS)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        plot.saveGraph(io.BytesIO(), fileFormat="png")
+    w.close()
+    assert [str(c.message) for c in caught if "missing from font" in str(c.message)] == []
 
 
 def test_the_volume_planes_follow_one_slider_once_and_3d_shows_the_binned_volume(app, win):

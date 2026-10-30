@@ -8,6 +8,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
+from matplotlib import font_manager, rcParams
 from silx.gui import qt
 
 from lamino_pal import jobs, remote
@@ -33,12 +34,26 @@ def _relaunch(path: Path) -> None:
     os.execve(sys.executable, [sys.executable, "-m", "lamino_pal.gui", "--project", str(path)], env)
 
 
+def _hangul_in_graphs() -> None:
+    """matplotlib, which draws the graphs, takes one font for its generic
+    sans-serif, DejaVu Sans, with no Hangul; a glyph falls back only to the
+    later families of its list, so list the ones Qt draws Hangul with."""
+    lay = qt.QTextLayout("한", qt.QApplication.font())
+    lay.beginLayout()
+    lay.createLine()
+    lay.endLayout()
+    fams = [r.rawFont().familyName() for r in lay.glyphRuns()]
+    known = {f.name for f in font_manager.fontManager.ttflist}
+    rcParams["font.family"] = ["sans-serif", *(f for f in fams if f in known)]
+
+
 class MainWindow(qt.QMainWindow):
     # The group, scan or volume in view changed.
     context_changed = qt.Signal()
 
     def __init__(self, project: Project, parent: qt.QWidget | None = None):
         super().__init__(parent)
+        _hangul_in_graphs()
         qt.loadUi(str(files("lamino_pal.gui") / "ui" / "main.ui"), self)
         self.project = project
         self.setWindowTitle(f"Lamino-Pal — {project.path}")
