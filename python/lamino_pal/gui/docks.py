@@ -10,6 +10,7 @@ from lamino_pal import LaminoPalError, dispatch, jobs
 from lamino_pal.jobs import JobState
 from lamino_pal.project import Project
 from lamino_pal.gui.runner import message
+from lamino_pal.gui.table import fill
 
 POLL_MS = 1000
 COLUMNS = ("job", "status", "progress", "ETA", "GPU", "message")
@@ -53,8 +54,8 @@ class JobsWidget(qt.QWidget):
 
     def poll(self) -> None:
         states = jobs.list_(self.project)[::-1]
-        self.table.setRowCount(len(states))
-        for row, st in enumerate(states):
+        rows = []
+        for st in states:
             cells = (
                 f"{st.id}",
                 st.status,
@@ -63,11 +64,11 @@ class JobsWidget(qt.QWidget):
                 "" if st.gpu is None else str(st.gpu),
                 st.error or st.message,
             )
-            for col, text in enumerate(cells):
-                self.table.setItem(row, col, qt.QTableWidgetItem(text))
+            rows.append([qt.QTableWidgetItem(text) for text in cells])
             if st.id in self._mine and not st.active:
                 self._mine.discard(st.id)
                 self.ended.emit(st)
+        fill(self.table, rows)
 
     def _cancel(self) -> None:
         for idx in self.table.selectionModel().selectedRows():

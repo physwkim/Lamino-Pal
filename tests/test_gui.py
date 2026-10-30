@@ -29,6 +29,7 @@ from lamino_pal.gui import status
 from lamino_pal.gui.actions import ACTIONS, RunOpDialog
 from lamino_pal.gui.form import ParamsForm
 from lamino_pal.gui.runner import Runner, by_hand
+from lamino_pal.gui.table import fill
 from lamino_pal.gui.tree import _key
 from lamino_pal.gui.viewer import Viewer
 from lamino_pal.jobs import JobState
@@ -274,6 +275,38 @@ def test_an_instant_op_shows_its_figure_and_a_job_its_end(app, win):
     rows = [win.jobs.table.item(r, 0).text() for r in range(win.jobs.table.rowCount())]
     assert st.id in rows
     dialog.close()
+
+
+def selected(table: qt.QTableWidget) -> list[str]:
+    return [table.item(i.row(), 0).text() for i in table.selectionModel().selectedRows()]
+
+
+def test_a_table_filled_again_keeps_its_selected_and_current_rows_by_their_first_cell(app):
+    t = qt.QTableWidget(0, 2)
+    t.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+
+    def rows(*keys):
+        return [[qt.QTableWidgetItem(k), qt.QTableWidgetItem("")] for k in keys]
+
+    fill(t, rows("j2", "j1"))
+    t.selectRow(1)
+    # A job submitted, newest first.
+    fill(t, rows("j3", "j2", "j1"))
+    assert selected(t) == ["j1"] and t.currentRow() == 2
+    fill(t, rows("j3", "j2"))
+    assert selected(t) == [] and t.currentRow() == -1
+
+
+def test_the_data_table_keeps_its_selected_folder_as_it_is_filled_again_sorted(app, win):
+    tab = win.tabs["Data"]
+    keys = ("raw", "tag", "kind", "n", "n_flat", "range_deg", "speed_dps", "exptime_s", "energy_ev")
+    tab._found = [{**dict.fromkeys(keys), "raw": raw, "tag": raw, "imported": []} for raw in ("c", "a", "b")]
+    tab._fill()
+    tab.table.sortByColumn(0, qt.Qt.AscendingOrder)
+    tab.table.selectRow(1)
+    assert [r[0] for r in tab._rows()] == ["b"]
+    tab._fill()
+    assert [r[0] for r in tab._rows()] == ["b"]
 
 
 def test_an_ambiguous_sweep_shows_every_candidate_to_pick_by_eye(app, win):

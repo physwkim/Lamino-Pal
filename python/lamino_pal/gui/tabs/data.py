@@ -5,6 +5,7 @@ from __future__ import annotations
 from silx.gui import qt
 
 from lamino_pal.gui.actions import RunOpDialog
+from lamino_pal.gui.table import fill
 from lamino_pal.gui.tabs.base import Tab, button, spin
 from lamino_pal.jobs import JobState
 from lamino_pal.ops.registry import Result
@@ -73,9 +74,8 @@ class DataTab(Tab):
 
     def _fill(self) -> None:
         groups = {s.tag: s.group for s in self.project.data.scan}
-        self.table.setSortingEnabled(False)
-        self.table.setRowCount(len(self._found))
-        for row, f in enumerate(self._found):
+        rows = []
+        for f in self._found:
             cells = (
                 f["raw"],
                 f["imported"][0] if f["imported"] else f["tag"],
@@ -89,12 +89,12 @@ class DataTab(Tab):
                 ", ".join(f["imported"]),
                 ", ".join(sorted({groups.get(t) or "" for t in f["imported"]} - {""})),
             )
-            for col, text in enumerate(cells):
-                item = qt.QTableWidgetItem(text)
+            items = [qt.QTableWidgetItem(text) for text in cells]
+            for col, item in enumerate(items):
                 if col != 1 or f["imported"]:
                     item.setFlags(item.flags() & ~qt.Qt.ItemIsEditable)
-                self.table.setItem(row, col, item)
-        self.table.setSortingEnabled(True)
+            rows.append(items)
+        fill(self.table, rows)
         self.table.resizeColumnsToContents()
 
     def _rows(self) -> list[tuple[str, str, bool]]:

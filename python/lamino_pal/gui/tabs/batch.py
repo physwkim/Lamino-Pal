@@ -12,6 +12,7 @@ from silx.gui import qt
 
 from lamino_pal import LaminoPalError, _core, dispatch
 from lamino_pal.gui.runner import message
+from lamino_pal.gui.table import fill
 from lamino_pal.gui.tabs.base import BAD, GOOD, Tab, badge, button
 from lamino_pal.jobs import JobState
 from lamino_pal.launch import ENV
@@ -81,16 +82,17 @@ class BatchTab(Tab):
         self.gpu.blockSignals(False)
         self._locks()
         tags = self.win.group_tags()
-        self.table.setRowCount(len(tags))
         self._params.clear()
         if g is None:
+            fill(self.table, [])
             self.head.setText("Pick a group in the project tree.")
             return
         recipe = self.project.data.recon
         fields = ", ".join(f"{k} = {v!r}" for k, v in recipe.items()) or "tomoxide's defaults"
         self.head.setText(f"group <b>{g.name}</b>: recipe [recon] {fields}")
         op = REGISTRY["recon.run"]
-        for row, tag in enumerate(tags):
+        rows = []
+        for tag in tags:
             params = {"tag": tag, "overwrite": self.overwrite.isChecked()}
             try:
                 p = dispatch.validate(op, params, self.project)
@@ -111,12 +113,15 @@ class BatchTab(Tab):
                     "exists" if out.exists() else "to make",
                 ]
                 color = GOOD if out.exists() else None
+            items = []
             for col, text in enumerate(cells):
                 item = qt.QTableWidgetItem(text)
                 item.setToolTip(text)
                 if col == len(cells) - 1 and color is not None:
                     item.setForeground(qt.QColor(color))
-                self.table.setItem(row, col, item)
+                items.append(item)
+            rows.append(items)
+        fill(self.table, rows)
         self.table.resizeColumnsToContents()
 
     def _locks(self) -> None:
