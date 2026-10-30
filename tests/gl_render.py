@@ -10,6 +10,7 @@ import pytest
 from conftest import pump
 from silx.gui import qt
 
+from lamino_pal.gui.tabs.volume import VIEWS
 from lamino_pal.gui.viewer import Viewer
 
 
@@ -186,6 +187,40 @@ def test_each_montage_label_is_drawn_inside_its_tile(app, project):
         for y, x, th, tw in at._tiles:
             inside |= (rows > y - e) & (rows < y + th - 1 + e) & (cols > x - e) & (cols < x + tw - 1 + e)
         assert inside.all(), (rows[~inside].min(), rows[~inside].max(), at._tiles, cam.zoom)
+    finally:
+        w.close()
+        pump(app, 0.3)
+
+
+def test_the_volume_views_cross_is_drawn_whole_zoomed_out(app, project):
+    from lamino_pal.gui.window import MainWindow
+
+    with h5py.File(project.work_dir / "v.h5", "w") as f:
+        f["exchange/data"] = np.random.default_rng(0).random((40, 128, 128), dtype="f4")
+    w = MainWindow(project)
+    w.resize(1600, 1000)
+    w.setAttribute(qt.Qt.WA_DontShowOnScreen)
+    w.show()
+    w._select("volume", "v.h5")
+    w.show_tab("Volume")
+    pump(app, 0.5)
+    vt = w.tabs["Volume"]
+    try:
+        for v in vt.views.values():
+            v.look(zoom=0.26)
+        missing = []
+        for at in ([20, 64, 64], [5, 17, 101], [33, 90, 9], [12, 41, 77]):
+            vt.at = at
+            vt._goto()
+            pump(app, 0.2)
+            for name, v in vt.views.items():
+                img = v.qt_viewer.screenshot(flash=False)[..., :3].astype(int)
+                yellow = (img[..., 0] > 150) & (img[..., 1] > 150) & (img[..., 2] < 100)
+                _, h, wd = (vt.shape[i] for i in VIEWS[name])
+                # Its line across the rows and its line down the columns.
+                if yellow.sum(1).max() < 0.8 * wd * 0.26 or yellow.sum(0).max() < 0.8 * h * 0.26:
+                    missing.append((at, name))
+        assert missing == []
     finally:
         w.close()
         pump(app, 0.3)

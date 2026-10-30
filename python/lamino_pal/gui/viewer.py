@@ -10,6 +10,7 @@ from typing import Any
 
 from napari._vispy.canvas import VispyCanvas
 from napari.components import ViewerModel
+from napari.layers import Shapes
 from napari.qt import QtViewer, get_stylesheet
 from napari.resources._icons import _theme_path
 from napari.utils.events import disconnect_events
@@ -152,6 +153,10 @@ class Viewer(qt.QWidget):
         super().__init__(parent)
         self.model = ViewerModel(title=title)
         self._qt_viewer: QtViewer | None = None
+        # Each layer of add_outlines, to its edges' width in screen px.
+        self._px: dict[Shapes, float] = {}
+        self.model.camera.events.zoom.connect(self._widen)
+        self.model.layers.events.removed.connect(lambda e: self._px.pop(e.value, None))
         layout = qt.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -218,6 +223,25 @@ class Viewer(qt.QWidget):
                 setattr(layer, k, v)
             return layer
         return self.model.add_image(data, name=name, **kwargs)
+
+    def add_outlines(self, data=None, *, px: float = 1.0, **kwargs) -> Shapes:
+        """A shapes layer whose edges are `px` screen px wide at any zoom.
+        napari's are as wide in data px, and GL draws one thinner than a
+        screen px only where it covers a pixel's center: zoomed out, a line
+        across the pixel rows is missing."""
+        layer = self.model.add_shapes(data, **kwargs)
+        self._px[layer] = px
+        # napari gives a shape set as data a width of 1.
+        layer.events.data.connect(self._widen)
+        self._widen()
+        return layer
+
+    def _widen(self, event=None) -> None:
+        for layer, px in self._px.items():
+            w = px / self.model.camera.zoom
+            # For shapes drawn by hand too.
+            layer.current_edge_width = w
+            layer.edge_width = w
 
     def clear(self) -> None:
         self.model.layers.clear()

@@ -230,12 +230,12 @@ class AlignTab(Tab):
         for b in r.bands:
             c = units.center_for_scan(scan, b.center_px)
             lines.append(np.array([[b.rows[0], c], [b.rows[1] - 1, c]]))
-        self.view.model.add_shapes(
+        self.view.add_outlines(
             lines,
             shape_type="line",
             name="centers",
             edge_color=["yellow"] + ["cyan"] * len(r.bands),
-            edge_width=2,
+            px=2,
         )
         color = GOOD if r.prominence >= TRUSTWORTHY else WARN
         bands = ", ".join(f"{b.center_px:.1f}" for b in r.bands)

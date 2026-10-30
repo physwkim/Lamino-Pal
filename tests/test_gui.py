@@ -659,6 +659,18 @@ def test_a_canvas_rebuilds_its_scene_once_for_the_layers_changed_in_one_pass(app
     assert built == [0, 5, "gc", 0]
 
 
+def test_outlines_keep_their_width_in_screen_px_as_zoomed_refilled_and_drawn(app):
+    v = Viewer("t")
+    layer = v.add_outlines(name="o", px=2)
+    v.model.camera.zoom = 0.25
+    # Set as data, napari's width is 1; drawn by hand, the current one.
+    layer.data = [(np.array([[0, 0], [0, 9]]), "line"), (np.array([[0, 0], [9, 0]]), "line")]
+    assert layer.edge_width == [8, 8] and layer.current_edge_width == 8
+    v.model.camera.zoom = 4
+    assert layer.edge_width == [0.5, 0.5] and layer.current_edge_width == 0.5
+    v.close()
+
+
 def test_an_overlays_visual_is_made_once_a_pass_and_only_while_it_is_shown(app, monkeypatch):
     # napari makes every layer's four, hidden, as it maps the layer and again
     # as it rebuilds the scene: half of a sweep's 27 s.

@@ -149,8 +149,8 @@ class VolumeTab(Tab):
         # layer moves the slider.
         for axis, v in self.views.items():
             v.model.add_image(src.transpose(VIEWS[axis]), name=vol, contrast_limits=w, colormap="gray")
-            v.model.add_shapes(name="fov", edge_color="cyan", edge_width=1, face_color="transparent")
-            v.model.add_shapes(name="cross", edge_color="yellow", edge_width=1)
+            v.add_outlines(name="fov", edge_color="cyan", face_color="transparent")
+            v.add_outlines(name="cross", edge_color="yellow")
         self.shape = d.shape
         self.at = [nz // 2, ny // 2, nx // 2]
         what = ", ".join(f"{k} {prov[k]}" for k in ("tag", "bin", "center_px", "tilt_deg") if k in prov)
