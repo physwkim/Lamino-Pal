@@ -8,6 +8,7 @@ import numpy as np
 import PySide6.QtCore  # noqa: F401  # silx takes the binding napari's qtpy is pinned to
 import pytest
 from conftest import pump
+from PySide6.QtTest import QTest
 from silx.gui import qt
 
 from lamino_pal.gui.tabs.volume import VIEWS
@@ -285,3 +286,126 @@ def test_the_drift_pair_is_drawn_alone_over_the_projections(app, project):
     finally:
         w.close()
         pump(app, 0.3)
+
+
+def shown(app, ndisplay: int = 2) -> Viewer:
+    """A viewer of a 20×60×120 volume, drawn 600×300."""
+    v = Viewer("t")
+    v.model.add_image(np.random.default_rng(0).random((20, 60, 120), dtype="f4"))
+    v.model.dims.ndisplay = ndisplay
+    v.resize(600, 300)
+    v.setAttribute(qt.Qt.WA_DontShowOnScreen)
+    v.show()
+    pump(app, 0.3)
+    return v
+
+
+def mouse(app, v: Viewer, button, a, b, modifiers=qt.Qt.NoModifier) -> None:
+    """`button` pressed at canvas px `a`, moved to `b` and released there."""
+    cv = v.qt_viewer.canvas.native
+    QTest.mousePress(cv, button, modifiers, qt.QPoint(*a))
+    for t in np.linspace(0, 1, 9)[1:]:
+        p = qt.QPointF(*(float(c) for c in np.add(a, np.subtract(b, a) * t)))
+        move = qt.QMouseEvent(qt.QEvent.MouseMove, p, cv.mapToGlobal(p), qt.Qt.NoButton, button, modifiers)
+        qt.QApplication.sendEvent(cv, move)
+        pump(app, 0.02)
+    QTest.mouseRelease(cv, button, modifiers, qt.QPoint(*b))
+    pump(app, 0.1)
+
+
+def world(v: Viewer, p) -> np.ndarray:
+    """The displayed world coordinates under canvas px `p`."""
+    cv = v.qt_viewer.canvas
+    return np.asarray(cv._map_canvas2world(list(p), cv.view))[list(v.model.dims.displayed)]
+
+
+def test_a_left_drag_zooms_a_2d_view_to_its_box_and_zoom_back_undoes_it(app):
+    v = shown(app)
+    cam = v.model.camera
+    try:
+        before = v.look(zoom=2.0, center=[30.0, 60.0])
+        a, b = (200, 100), (320, 180)
+        corners = world(v, a), world(v, b)
+        mouse(app, v, qt.Qt.LeftButton, a, b)
+        # silx's: the box fit whole, at its middle.
+        h, w = v.model._canvas_size
+        rows, cols = np.abs(corners[1] - corners[0])
+        assert cam.zoom == pytest.approx(min(h / rows, w / cols), rel=1e-3)
+        assert cam.center[-2:] == pytest.approx(np.mean(corners, 0), abs=1e-3)
+        v._menu.setAttribute(qt.Qt.WA_DontShowOnScreen)
+        mouse(app, v, qt.Qt.RightButton, b, b)
+        assert v._menu.isVisible()
+        v._menu.actions()[0].trigger()
+        v._menu.hide()
+        assert (cam.zoom, list(cam.center[-2:])) == (before["zoom"], before["center"][-2:])
+        # Nothing left to go back to: the fit.
+        v.zoom_back()
+        fit = cam.zoom, cam.center
+        v.model.reset_view()
+        assert (cam.zoom, cam.center) == fit and fit[0] != before["zoom"]
+    finally:
+        v.close_canvas()
+        v.close()
+
+
+# Under silx's 5 px drag; a drag, but a box of no area.
+@pytest.mark.parametrize("b", [(203, 102), (212, 100)])
+def test_a_left_drag_too_short_or_thin_for_a_box_leaves_a_2d_view(app, b):
+    v = shown(app)
+    cam = v.model.camera
+    try:
+        v.look(zoom=2.0, center=[30.0, 60.0])
+        before = cam.zoom, cam.center
+        mouse(app, v, qt.Qt.LeftButton, (200, 100), b)
+        assert (cam.zoom, cam.center) == before and not v.model._zoom_box.visible
+    finally:
+        v.close_canvas()
+        v.close()
+
+
+@pytest.mark.parametrize(
+    "ndisplay, button, modifiers",
+    [
+        (2, qt.Qt.MiddleButton, qt.Qt.NoModifier),
+        (3, qt.Qt.MiddleButton, qt.Qt.NoModifier),
+        (3, qt.Qt.LeftButton, qt.Qt.ControlModifier),
+    ],
+)
+def test_a_pan_keeps_the_point_grabbed_under_the_cursor(app, ndisplay, button, modifiers):
+    v = shown(app, ndisplay)
+    cam = v.model.camera
+    try:
+        angles, zoom = cam.angles, cam.zoom
+        a, b = (200, 100), (330, 190)
+        grabbed = world(v, a)
+        mouse(app, v, button, a, b, modifiers)
+        assert world(v, b) == pytest.approx(grabbed, abs=1e-2)
+        assert cam.angles == pytest.approx(angles) and cam.zoom == zoom
+    finally:
+        v.close_canvas()
+        v.close()
+
+
+def test_a_left_drag_still_turns_a_3d_view(app):
+    v = shown(app, 3)
+    try:
+        angles = v.model.camera.angles
+        mouse(app, v, qt.Qt.LeftButton, (200, 100), (330, 190))
+        assert v.model.camera.angles != pytest.approx(angles)
+    finally:
+        v.close_canvas()
+        v.close()
+
+
+def test_a_layer_drawing_by_hand_keeps_the_left_drag(app):
+    v = shown(app)
+    cam = v.model.camera
+    try:
+        roi = v.add_outlines(by_hand=True)
+        roi.mode = "add_rectangle"
+        before = cam.zoom, cam.center
+        mouse(app, v, qt.Qt.LeftButton, (200, 100), (320, 180))
+        assert len(roi.data) == 1 and (cam.zoom, cam.center) == before
+    finally:
+        v.close_canvas()
+        v.close()

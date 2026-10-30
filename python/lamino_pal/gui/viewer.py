@@ -8,6 +8,7 @@ import gc
 from types import SimpleNamespace
 from typing import Any
 
+import numpy as np
 from napari._vispy.canvas import VispyCanvas
 from napari.components import ViewerModel
 from napari.layers import Shapes
@@ -15,7 +16,12 @@ from napari.qt import QtViewer, get_stylesheet
 from napari.resources._icons import _theme_path
 from napari.utils.events import disconnect_events
 from napari.utils.theme import available_themes
-from silx.gui import qt
+from silx.gui import icons, qt
+
+# silx's zoom mode: a press is a drag once 5 px from where it was, and a drag
+# zooms to its box if that covers 5 px².
+_DRAG = 5
+_AREA = 5
 
 
 @functools.cache
@@ -171,6 +177,12 @@ class Viewer(qt.QWidget):
         self._px: dict[Shapes, float] = {}
         self.model.camera.events.zoom.connect(self._widen)
         self.model.layers.events.removed.connect(lambda e: self._px.pop(e.value, None))
+        # napari's: drag_to_zoom, Alt+drag, now _drag's.
+        self.model.mouse_drag_callbacks[:] = [self._drag]
+        # The camera before each box zoom, for Zoom Back.
+        self._back: list[tuple[float, tuple]] = []
+        self._menu = qt.QMenu(self)
+        self._menu.addAction(icons.getQIcon("zoom-back"), "Zoom Back", self.zoom_back)
         layout = qt.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -233,6 +245,79 @@ class Viewer(qt.QWidget):
                 cam.angles = tuple(angles)
             canvas.keep()
         return {"zoom": cam.zoom, "center": list(cam.center), "angles": list(cam.angles)}
+
+    def zoom_back(self) -> None:
+        """silx's: the camera before the last box zoom, else the fit."""
+        if self._back:
+            zoom, center = self._back.pop()
+            self.look(zoom=zoom, center=list(center))
+        else:
+            self.model.reset_view()
+
+    def _drag(self, model: ViewerModel, event):
+        """silx's mouse wherever napari's would move the camera: in 2D a
+        left drag zooms to a box and a right click offers Zoom Back; a
+        middle drag pans, and in 3D, where a left drag turns the view, a
+        Ctrl+left one too. A press taken here never reaches the vispy
+        camera, which keeps only the wheel in 2D."""
+        if not model.camera.mouse_pan:
+            return
+        flat, button = model.dims.ndisplay == 2, event.button
+        if button == 3 or (not flat and button == 1 and "Control" in event.modifiers):
+            gen = self._pan(model, event)
+        elif button == 1 and (flat or "Alt" in event.modifiers):
+            gen = self._box(model, event)
+        elif button == 2 and flat:
+            gen = self._click(event)
+        else:
+            return
+        event.handled = True
+        yield from gen
+
+    def _pan(self, model: ViewerModel, event):
+        """The point grabbed held under the cursor."""
+        dims = list(event.dims_displayed)
+        grabbed = np.asarray(event.position)[dims]
+        while True:
+            yield
+            center = np.array(model.camera.center, float)
+            center[-len(dims) :] += grabbed - np.asarray(event.position)[dims]
+            model.camera.center = tuple(center)
+
+    def _box(self, model: ViewerModel, event):
+        """napari's zoom box drawn from the press; on release, silx's zoom to it."""
+        box = model._zoom_box
+        a, at = np.asarray(event.pos), event.position
+        dragged = False
+        yield
+        while True:
+            b = np.asarray(event.pos)
+            dragged = dragged or ((b - a) ** 2).sum() >= _DRAG**2
+            if event.type == "mouse_release":
+                break
+            if dragged:
+                # Canvas rows, columns.
+                box.position = (tuple(a[::-1]), tuple(b[::-1]))
+                box.visible = True
+            yield
+        box.visible = False
+        if dragged and np.prod(np.abs(b - a)) >= _AREA:
+            cam = model.camera
+            self._back.append((cam.zoom, cam.center))
+            # The box fit whole, at its middle. Not by napari's _on_boxzoom,
+            # which divides the canvas's width by the box's rows.
+            width_height = np.asarray(self.qt_viewer.canvas._current_viewbox_size)
+            middle = np.mean([at, event.position], 0)[list(event.dims_displayed)]
+            self.look(zoom=cam.zoom * np.min(width_height / np.abs(b - a)), center=list(middle))
+
+    def _click(self, event):
+        """Zoom Back offered by a click, not a drag."""
+        a = np.asarray(event.pos)
+        yield
+        while event.type == "mouse_move":
+            yield
+        if ((np.asarray(event.pos) - a) ** 2).sum() < _DRAG**2:
+            self._menu.popup(qt.QCursor.pos())
 
     def replace(self, name: str, data, **kwargs):
         """Image layer `name` holding `data`, made or refilled; made, under
