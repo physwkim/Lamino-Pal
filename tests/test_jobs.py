@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -90,7 +91,8 @@ def test_submit_refuses_before_starting_anything_and_logs_why(project, name, par
 
 def test_an_existing_or_queued_output_is_refused_at_submit(project):
     first = jobs.submit(project, "test.steps", {"n": 2, "dt": 1.0}, "cli")
-    with pytest.raises(Refused, match=f"job {first.id} is writing .*artifacts/steps2.txt"):
+    out = re.escape(os.path.join("artifacts", "steps2.txt"))
+    with pytest.raises(Refused, match=f"job {first.id} is writing .*{out}"):
         jobs.submit(project, "test.steps", {"n": 2}, "cli")
     assert last_log(project)["status"] == "refused"
     assert jobs.wait(project, first.id, 20).status == "done"
