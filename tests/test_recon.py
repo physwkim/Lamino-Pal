@@ -319,7 +319,8 @@ def test_the_cli_is_built_only_from_the_cores_own_commit_and_kept(tmp_path, monk
     assert sorted(p.name for p in exe.parent.iterdir()) == [".build.lock", name]
     # Kept: neither the source nor cargo is needed again.
     shutil.rmtree(bin_)
-    shutil.rmtree(tox)
+    # Moved, not removed: Windows's git leaves its objects read-only.
+    tox.rename(tox.with_name("moved"))
     assert recon.tomoxide_cli() == exe
 
 
