@@ -365,7 +365,7 @@ class AlignTab(Tab):
         layer = self.view.model.layers["sweep"]
         img = png(to_u8(layer.data[self._values.index(c)], tuple(layer.contrast_limits)))
         name = figure_name("align.center_sweep").replace(".png", f"-c{c:.2f}.png")
-        return str(figures.save(self.project.work_dir, name, img))
+        return figures.save(self.project.work_dir, name, img)
 
     # Tilt ------------------------------------------------------------------
 

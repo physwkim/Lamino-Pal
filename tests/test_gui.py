@@ -660,7 +660,7 @@ def test_a_preview_is_made_again_only_as_its_inputs_change_and_a_compare_shown_s
     win.show_tab("Raw")
     win.show_tab("Preview")
     pump(app, 0.2)
-    win._select("artifact", os.path.relpath(ended[0].result["artifacts"][0], win.project.work_dir))
+    win._select("artifact", "artifacts/" + os.path.basename(ended[0].result["artifacts"][0]))
     pump(app, 0.2)
     assert len(previews) == 4
     assert not pt.cnr.isHidden() and "variant slice" in names(pt.view)

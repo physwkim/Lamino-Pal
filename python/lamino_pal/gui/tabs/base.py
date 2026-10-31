@@ -194,11 +194,11 @@ class Tab(qt.QWidget):
         """Op `op`'s figure of result `r`, saved to cite: its path under the
         work directory, None for an op without one."""
         fig = save_figure(self.project, op, r.model_dump(mode="json"), r.arrays, name or figure_name(op))
-        return None if fig is None else str(fig[0])
+        return None if fig is None else fig[0]
 
     def job_figure(self, st: JobState) -> str | None:
         fig = job_figure(self.project, st)
-        return None if fig is None else str(fig[0])
+        return None if fig is None else fig[0]
 
     def decide(self, field: str, value: Any, evidence: list[str | None], method: Method) -> None:
         """Decide `field` of the current group as the user."""

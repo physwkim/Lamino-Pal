@@ -46,15 +46,16 @@ def render(op: str, result: dict[str, Any], arrays: Arrays) -> tuple[bytes, str]
     return png(img), caption
 
 
-def save(work_dir: Path, name: str, image: bytes) -> Path:
+def save(work_dir: Path, name: str, image: bytes) -> str:
     """PNG `image` as `FIGURES`/`name` under `work_dir`, kept when it exists,
-    so a decision can cite what was seen; the path relative to `work_dir`."""
+    so a decision can cite what was seen; the path relative to `work_dir`,
+    `/`-separated as a decision stores it."""
     rel = FIGURES / name
     path = work_dir / rel
     if not path.exists():
         with written(path) as part:
             part.write_bytes(image)
-    return rel
+    return rel.as_posix()
 
 
 def _w(w: tuple[float, float]) -> str:
