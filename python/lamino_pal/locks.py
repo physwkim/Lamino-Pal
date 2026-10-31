@@ -60,7 +60,7 @@ else:
 
 @contextmanager
 def locked(
-    path: str | os.PathLike[str], mode: str = "a", wait_s: float | None = None, encoding: str | None = None
+    path: str | os.PathLike[str], mode: str = "a", wait_s: float | None = None, encoding: str = "utf-8"
 ) -> Iterator[IO | None]:
     """`path` open in `mode` and locked: waited for for good with None, else
     None once `wait_s` passes with another holding it."""

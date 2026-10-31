@@ -280,7 +280,8 @@ def gpu_lock(n: int, wait_s: float | None) -> Iterator[int]:
     wait for good with None."""
     with locks.locked(gpu_lock_path(n), "a+", wait_s) as f:
         if f is None:
-            raise Refused(f"GPU {n} is busy ({gpu_lock_path(n).read_text().strip() or 'holder unknown'})")
+            holder = gpu_lock_path(n).read_text(encoding="utf-8").strip() or "holder unknown"
+            raise Refused(f"GPU {n} is busy ({holder})")
         f.seek(0)
         f.truncate()
         f.write(f"pid {os.getpid()}")

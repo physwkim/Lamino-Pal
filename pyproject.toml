@@ -36,4 +36,5 @@ markers = [
     "gpu: runs a GPU op, which a core built without cuda refuses",
 ]
 # Ours only: the GUI stack imports dependencies that still warn on import.
-filterwarnings = ["error::DeprecationWarning:lamino_pal"]
+# EncodingWarning is raised only under PYTHONWARNDEFAULTENCODING, as CI sets.
+filterwarnings = ["error::DeprecationWarning:lamino_pal", "error::EncodingWarning:lamino_pal"]

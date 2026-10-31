@@ -85,3 +85,6 @@ jobs:
         run: maturin develop --release -F pyo3/extension-module
       - name: pytest
         run: python -m pytest -rs -m "not gpu and not golden"
+        # Every text file and pipe of ours names its encoding: the locale's is cp1252 on Windows.
+        env:
+          PYTHONWARNDEFAULTENCODING: "1"

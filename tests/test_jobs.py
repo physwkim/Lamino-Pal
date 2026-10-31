@@ -72,6 +72,14 @@ def test_a_failing_op_fails_its_job(project):
     assert "RuntimeError: failed at step 1" in (jobs.jobs_dir(project) / st.id / "out.log").read_text()
 
 
+def test_a_jobs_out_log_is_utf8_whatever_the_locale(project, monkeypatch):
+    # Windows' locale encoding, which has no Korean.
+    monkeypatch.setenv("PYTHONIOENCODING", "cp1252")
+    st = jobs.wait(project, jobs.submit(project, "test.steps", {"n": 1, "say": "단면 slice"}, "gui").id, 20)
+    assert st.status == "done"
+    assert "단면 slice" in (jobs.jobs_dir(project) / st.id / "out.log").read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize(
     "name, params, err, why, status",
     [

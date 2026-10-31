@@ -399,7 +399,7 @@ def tomoxide_cli() -> Path:
     rev = subprocess.run(
         ["git", "-C", str(tox), "describe", "--tags", "--always", "--dirty", "--abbrev=12"],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         check=True,
     ).stdout.strip()
     if rev.endswith("-dirty"):
@@ -420,7 +420,7 @@ def _cargo_build(tox: Path) -> Path:
     argv = [cargo, "build", "--release", "--features", "cuda", "-p", "tomoxide-cli"]
     argv += ["--manifest-path", str(tox / "Cargo.toml"), "--message-format=json-render-diagnostics"]
     try:
-        r = subprocess.run(argv, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        r = subprocess.run(argv, capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL)
     except FileNotFoundError:
         raise Refused(f"recon.run builds the tomoxide CLI with cargo, which is not at {cargo}") from None
     if r.returncode != 0:
@@ -456,7 +456,7 @@ def run(ctx: Context, p: RunParams) -> RunResult:
     scan, path = scans.find(ctx.project, p.tag)
     exe = tomoxide_cli()
     # The job's out.log names the build that ran.
-    sys.stdout.write(subprocess.run([str(exe), "--version"], capture_output=True, text=True, check=True).stdout)
+    sys.stdout.write(subprocess.run([str(exe), "--version"], capture_output=True, encoding="utf-8", check=True).stdout)
     out = Path(p.out)
     tail: deque[str] = deque(maxlen=40)
     done = (0, 1, 0.0)
@@ -465,9 +465,9 @@ def run(ctx: Context, p: RunParams) -> RunResult:
         argv = [str(exe), "--backend", "cuda", "recon", str(path), "--config", str(config)]
         argv += ["--center", repr(units.center_for_scan(scan, p.center_px)), "--lamino_angle", repr(p.tilt_deg)]
         argv += ["--save_format", "h5", "--output", str(part), "--progress_json"]
-        config.write_text(tomli_w.dumps(p.recipe))
+        config.write_text(tomli_w.dumps(p.recipe), encoding="utf-8")
         proc = subprocess.Popen(
-            argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+            argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding="utf-8"
         )
         try:
             ctx.progress(0.05, "reconstructing")

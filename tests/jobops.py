@@ -19,6 +19,7 @@ class StepsParams(OutputParams):
     child: bool = False  # start SLEEP as the job's child; its pid in out.child
     child_step: bool = False  # first wait on SLEEP, failing if it fails; its pid in out.child
     reserved: float = 0.0  # a share reported at once before the steps, as recon ops reserve one
+    say: str = ""  # printed to out.log first
     out: OptOutPath = None
 
 
@@ -34,6 +35,8 @@ class StepsResult(Result):
 
 def _steps(ctx, p):
     """Sleep `dt` `n` times, reporting progress after each, while writing `out`."""
+    if p.say:
+        print(p.say, flush=True)
     with written(p.out) as part:
         part.write_text("")
         child = subprocess.Popen(SLEEP).pid if p.child else None

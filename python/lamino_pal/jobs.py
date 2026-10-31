@@ -357,12 +357,12 @@ def _state(d: Path) -> JobState:
 
 
 def _read(d: Path) -> JobState:
-    return JobState.model_validate_json((d / "state.json").read_text())
+    return JobState.model_validate_json((d / "state.json").read_text(encoding="utf-8"))
 
 
 def _write(d: Path, st: JobState) -> None:
     tmp = d / f".state.{os.getpid()}.{threading.get_ident()}.tmp"
-    tmp.write_text(json.dumps(st.model_dump(mode="json"), indent=1))
+    tmp.write_text(json.dumps(st.model_dump(mode="json"), indent=1), encoding="utf-8")
     os.replace(tmp, d / "state.json")
 
 

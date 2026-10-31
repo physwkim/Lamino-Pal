@@ -29,13 +29,16 @@ def main(argv: list[str] | None = None) -> int:
     j = sub.add_parser("job")
     j.add_argument("dir")
     a = ap.parse_args(argv)
+    # Not the locale's: Windows' cannot write a Korean path into a job's out.log.
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8")
     load_all()
     if a.cmd == "job":
         return jobs.run(Path(a.dir))
     if a.params is None:
         params = {}
     else:
-        params = json.load(sys.stdin if a.params == "-" else open(a.params))
+        params = json.load(sys.stdin.buffer if a.params == "-" else open(a.params, "rb"))
     project = Project(a.project)
     op = REGISTRY.get(a.op)
     run = dispatch.run_job if op is not None and op.cost == "job" else dispatch.run
