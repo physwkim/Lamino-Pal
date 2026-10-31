@@ -1,5 +1,7 @@
 import math
 import os
+import shutil
+import tempfile
 import time
 
 # Before anything can start a thread: GPU ops run on this process's one GPU.
@@ -37,8 +39,12 @@ def run_job():
 
 
 @pytest.fixture(autouse=True)
-def gpu_lock_dir(tmp_path, monkeypatch):
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "run"))
+def gpu_lock_dir(monkeypatch):
+    # Not under tmp_path: macOS's is too long for a Unix socket's path.
+    d = tempfile.mkdtemp(prefix="run-")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", d)
+    yield
+    shutil.rmtree(d, ignore_errors=True)
 
 
 DATA = Path(os.environ.get("LAMINO_PAL_DATA", "~/work/261003_Lamino_test")).expanduser()
