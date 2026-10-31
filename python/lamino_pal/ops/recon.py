@@ -388,7 +388,8 @@ CLI_CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "
 def tomoxide_cli() -> Path:
     """The tomoxide CLI of the core's own tomoxide commit, built by cargo from
     the submodule once and kept in `CLI_CACHE`."""
-    exe = CLI_CACHE / _core.tomoxide_rev() / "tomoxide"
+    # Windows runs only what its name says is a program.
+    exe = CLI_CACHE / _core.tomoxide_rev() / ("tomoxide.exe" if os.name == "nt" else "tomoxide")
     if exe.is_file():
         # Only a build that passed the checks below is kept.
         return exe

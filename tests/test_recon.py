@@ -301,12 +301,16 @@ def test_the_cli_is_built_only_from_the_cores_own_commit_and_kept(tmp_path, monk
     built.write_text("#!/bin/sh\n")
     built.chmod(0o755)
     msg = {"reason": "compiler-artifact", "target": {"name": "tomoxide"}, "executable": str(built)}
-    (bin_ / "cargo").write_text(f"#!/bin/sh\necho '{json.dumps(msg)}'\n")
-    (bin_ / "cargo").chmod(0o755)
-    monkeypatch.setenv("PATH", f"{bin_}:{os.environ['PATH']}")
+    if os.name == "nt":
+        (bin_ / "cargo.bat").write_text(f"@echo {json.dumps(msg)}\n")
+    else:
+        (bin_ / "cargo").write_text(f"#!/bin/sh\necho '{json.dumps(msg)}'\n")
+        (bin_ / "cargo").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_}{os.pathsep}{os.environ['PATH']}")
     exe = recon.tomoxide_cli()
-    assert exe == tmp_path / "cache" / rev / "tomoxide" and os.access(exe, os.X_OK)
-    assert sorted(p.name for p in exe.parent.iterdir()) == [".build.lock", "tomoxide"]
+    name = "tomoxide.exe" if os.name == "nt" else "tomoxide"
+    assert exe == tmp_path / "cache" / rev / name and os.access(exe, os.X_OK)
+    assert sorted(p.name for p in exe.parent.iterdir()) == [".build.lock", name]
     # Kept: neither the source nor cargo is needed again.
     shutil.rmtree(bin_)
     shutil.rmtree(tox)
