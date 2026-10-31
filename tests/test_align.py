@@ -41,6 +41,7 @@ def test_rings_refuse_a_half_turn(project):
         run(project, "align.rings", tag="h")
 
 
+@pytest.mark.gpu
 def test_sweep_refuses_a_z_band_of_another_binning(project):
     _scan(project, "s", [0, 90, 180, 270])
     _group(project, ["s"], z_band=ZBand(z=(2, 6), bin=4, tilt_deg=20.0, depth=10))
@@ -48,12 +49,14 @@ def test_sweep_refuses_a_z_band_of_another_binning(project):
         run(project, "align.center_sweep", tag="s", center_px=15.5)
 
 
+@pytest.mark.gpu
 def test_tilt_scan_needs_a_decided_center(project, run_job):
     _scan(project, "s", [0, 90, 180, 270])
     with pytest.raises(Refused, match="s has no decided center"):
         run_job(project, "align.tilt_scan", {"tag": "s"})
 
 
+@pytest.mark.gpu
 def test_tilt_scan_and_center_compare_hand_tomoxide_the_jobs_cancel(project, run_job, monkeypatch):
     _scan(project, "s", np.arange(16) * 22.5, shape=(8, 32))
     load, given = scans.stack, []
@@ -97,6 +100,7 @@ def test_step1000_rings_are_not_trustworthy(golden_project):
         run(golden_project, "align.rings", tag="f180_N500")
 
 
+@pytest.mark.gpu
 @pytest.mark.golden
 def test_step1000_sweep_from_rings_is_ambiguous(golden_project):
     r = run(golden_project, "align.center_sweep", tag="step1000")
@@ -108,6 +112,7 @@ def test_step1000_sweep_from_rings_is_ambiguous(golden_project):
     assert [(x.center_px, round(x.deficit, 4)) for x in v.rivals][0] == (pytest.approx(976.11, abs=0.01), 0.0518)
 
 
+@pytest.mark.gpu
 @pytest.mark.golden
 def test_tilt_scan_carries_the_band_to_each_tilt(mount, run_job):
     _group(mount, ["step1000"], center_px=1008.5, z_band=ZBand(z=(420, 600), bin=2, tilt_deg=20.0, depth=1090))
@@ -135,6 +140,7 @@ def test_tilt_scan_carries_the_band_to_each_tilt(mount, run_job):
     assert all("focus_by_z" not in t for t in meta["tilts"])
 
 
+@pytest.mark.gpu
 @pytest.mark.golden
 def test_center_compare_keeps_each_centers_band_middle_slice(mount, run_job):
     _group(mount, ["step1000"], center_px=1008.5, z_band=ZBand(z=(420, 600), bin=2, tilt_deg=20.0, depth=1090))

@@ -31,6 +31,9 @@ auditwheel = "skip"
 testpaths = ["tests"]
 # napari's pytest plugins import napari into every run.
 addopts = "-p no:napari -p no:npe2 -p no:napari-plugin-engine"
-markers = ["golden: imports LAMINO_PAL_DATA and compares with the 261003 h5 files"]
+markers = [
+    "golden: imports LAMINO_PAL_DATA and compares with the 261003 h5 files",
+    "gpu: runs a GPU op, which a core built without cuda refuses",
+]
 # Ours only: the GUI stack imports dependencies that still warn on import.
 filterwarnings = ["error::DeprecationWarning:lamino_pal"]

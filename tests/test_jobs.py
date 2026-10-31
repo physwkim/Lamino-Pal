@@ -235,6 +235,7 @@ def test_a_job_process_that_dies_is_marked_failed(project):
     assert st.status == "failed" and st.error.startswith("the job process ended without a result")
 
 
+@pytest.mark.gpu
 def test_a_gpu_job_takes_a_free_batch_gpu_and_waits_for_a_busy_one(project):
     project.commit(lambda f: setattr(f.gpu, "batch", [2, 3]))
     with dispatch.gpu_lock(2, 0):
@@ -251,6 +252,7 @@ def test_a_gpu_job_takes_a_free_batch_gpu_and_waits_for_a_busy_one(project):
     assert (st.status, st.result["gpu"]) == ("done", 3)
 
 
+@pytest.mark.gpu
 def test_a_gpu_job_refuses_a_gpu_outside_the_batch(project, monkeypatch):
     project.commit(lambda f: setattr(f.gpu, "batch", [1]))
     monkeypatch.setattr(jobs, "_pick_gpu", lambda project: 1)

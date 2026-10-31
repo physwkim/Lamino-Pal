@@ -110,6 +110,7 @@ def test_reconstruction_needs_a_decided_center_and_a_final_one_a_decided_tilt(pr
     assert validate(project, "recon.run", tag="s", tilt_deg=20.0).tilt_deg == 20.0
 
 
+@pytest.mark.gpu
 def test_preview_crosses_its_planes_at_the_voxel(project):
     _scan(project, "s")
     _decide(project, "s", center_px=64.5)
@@ -130,6 +131,7 @@ def test_preview_crosses_its_planes_at_the_voxel(project):
     assert seen[-1] == f"row {r.depth}/{r.depth}"
 
 
+@pytest.mark.gpu
 def test_preview_takes_the_middle_of_the_band_carried_to_its_tilt(project):
     _scan(project, "s", shape=(64, 64))
     _decide(project, "s", center_px=64.5)
@@ -142,6 +144,7 @@ def test_preview_takes_the_middle_of_the_band_carried_to_its_tilt(project):
     assert (r.depth, r.at[0]) == (d40, (lo + hi) // 2)
 
 
+@pytest.mark.gpu
 def test_compare_keeps_each_variant_and_its_cnr(project, run_job):
     _scan(project, "s")
     _decide(project, "s", center_px=64.5)
@@ -163,6 +166,7 @@ def test_compare_keeps_each_variant_and_its_cnr(project, run_job):
         run_job(project, "recon.compare", params)
 
 
+@pytest.mark.gpu
 def test_split_reconstructs_each_half_alone(project, run_job):
     # Tall and wide enough for a disk past the FRC taper.
     _scan(project, "s", shape=(32, 160))
@@ -226,6 +230,7 @@ with h5py.File(out, "w") as f:
 """
 
 
+@pytest.mark.gpu
 def test_run_writes_the_volume_with_its_provenance_and_leaves_nothing_else(
     project, run_job, tmp_path, monkeypatch, capsys
 ):
@@ -260,6 +265,7 @@ def test_run_writes_the_volume_with_its_provenance_and_leaves_nothing_else(
     assert capsys.readouterr().out.startswith("tomoxide 0.0.0 (fake)\n")
 
 
+@pytest.mark.gpu
 def test_a_failed_run_says_why_and_leaves_nothing(project, run_job, tmp_path, monkeypatch):
     _scan(project, "s")
     _decide(project, "s", center_px=64.5, tilt_deg=20.0)
@@ -333,6 +339,7 @@ def _nrmse(a, b):
     return np.sqrt(((a - b) ** 2).sum() / (b**2).sum())
 
 
+@pytest.mark.gpu
 @pytest.mark.golden
 def test_compare_equals_the_cli_volume_of_each_variant(golden_project, run_job):
     params = {"tag": "step1000", "center_px": 1008.5, "tilt_deg": 20.0, "recipe": GOLDEN_RECIPE}
@@ -347,6 +354,7 @@ def test_compare_equals_the_cli_volume_of_each_variant(golden_project, run_job):
             assert _nrmse(arrays["xz"][i], d[:, y, :]) < 3e-6, name
 
 
+@pytest.mark.gpu
 @pytest.mark.golden
 def test_split_on_step1000(golden_project, run_job):
     params = {"tag": "step1000", "center_px": 1008.5, "tilt_deg": 20.0, "recipe": GOLDEN_RECIPE}
@@ -359,6 +367,7 @@ def test_split_on_step1000(golden_project, run_job):
     assert r.resolution_px == pytest.approx(1024 / 74)
 
 
+@pytest.mark.gpu
 @pytest.mark.golden
 def test_run_equals_the_cli_volume(golden_project, run_job):
     params = {"tag": "step1000", "center_px": 1008.5, "tilt_deg": 20.0, "recipe": GOLDEN_RECIPE}

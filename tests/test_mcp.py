@@ -352,6 +352,7 @@ async def test_the_stdio_server_answers_once_it_has_pinned_its_gpu(project):
     assert r.structured_content["path"] == str(project.path)
 
 
+@pytest.mark.gpu
 async def test_the_stdio_server_runs_on_the_projects_interactive_gpu(project):
     project.commit(lambda f: setattr(f.gpu, "interactive", 1))
     server = StdioServerParameters(
@@ -372,6 +373,7 @@ def test_an_unreadable_project_stops_the_server(tmp_path):
     assert p.returncode == 2 and f"cannot read project {bad}" in p.stderr
 
 
+@pytest.mark.gpu
 @pytest.mark.golden
 async def test_the_stdio_server_aligns_previews_and_cancels_a_run_on_step1000(tmp_path):
     p = Project.create(tmp_path / "e2e" / "project.toml", str(DATA))

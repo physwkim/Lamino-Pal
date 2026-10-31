@@ -331,6 +331,7 @@ def test_a_job_resubmitted_on_a_done_jobs_params_shows_that_job_until_its_input_
     dialog.close()
 
 
+@pytest.mark.gpu
 def test_a_batch_row_whose_final_exists_reads_so_and_a_rerun_shows_the_job_that_made_it(app, win):
     old = time.time() - 60
     for f in win.project.work_dir.rglob("*"):
@@ -611,6 +612,7 @@ def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_under_its_slice(ap
     assert at.plot._getMarker("picked").getXPosition() == 21
 
 
+@pytest.mark.gpu
 def test_a_preview_is_made_again_only_as_its_inputs_change_and_a_compare_shown_stays(app, win, monkeypatch):
     pt = win.tabs["Preview"]
     previews = []
