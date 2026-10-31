@@ -73,7 +73,7 @@ def _put(f: ProjectFile, scan: Scan, overwrite: bool) -> None:
 
 def _relative(ctx: Context, path: str) -> str:
     wd = ctx.project.work_dir
-    return str(Path(path).relative_to(wd)) if is_under(Path(path), wd) else path
+    return Path(path).relative_to(wd).as_posix() if is_under(Path(path), wd) else path
 
 
 @contextmanager

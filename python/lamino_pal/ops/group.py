@@ -41,7 +41,7 @@ def decide(ctx: Context, p: DecideParams) -> DecideResult:
         path = (wd / e).resolve()
         if not is_under(path, wd) or not path.exists():
             raise Refused(f"evidence {e}: no such file under the work directory {wd}")
-        evidence.append(str(path.relative_to(wd.resolve())))
+        evidence.append(path.relative_to(wd.resolve()).as_posix())
     by = "agent" if ctx.caller == "mcp" else "user"
     previous = None
 
