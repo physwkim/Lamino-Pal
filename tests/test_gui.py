@@ -36,6 +36,7 @@ from silx.gui.plot import Plot1D
 from silx.gui.plot.items import MarkerBase, Shape
 from test_recon import _scan
 from vispy.app.canvas import MouseEvent
+from vispy.gloo.gl import _gl2
 
 from lamino_pal import LaminoPalError, _core, dispatch, jobs, remote
 from lamino_pal.artifacts import save_h5
@@ -53,6 +54,16 @@ from lamino_pal.ops.align import Rival, SweepResult, Verdict
 from lamino_pal.ops.raw import RangeResult, TiltFlowResult
 from lamino_pal.ops.volume import FocusResult
 from lamino_pal.render import to_u8, window
+
+
+def _no_gl(name, restype, argtypes):
+    # What Linux's libGL does called with no context: nothing, 0 or NULL
+    # back. A Mac's crashes and vispy's Windows loader raises.
+    value = restype().value if restype else None
+    return lambda *args: value
+
+
+_gl2._get_gl_func = _no_gl
 
 
 @pytest.fixture(scope="module")
