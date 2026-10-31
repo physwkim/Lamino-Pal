@@ -19,7 +19,7 @@ from lamino_pal.gui.tabs.base import BAD, GOOD, WARN, Tab, badge, button, spin
 from lamino_pal.jobs import JobState
 from lamino_pal.mcp import figures
 from lamino_pal.ops.registry import Result
-from lamino_pal.ops.volume import data, provenance
+from lamino_pal.ops.volume import Unheld, data, provenance
 from lamino_pal.render import window
 
 # What each rendering draws along a ray; None draws the voxels themselves.
@@ -35,8 +35,11 @@ RENDERING = {
 VIEWS = {"z": (0, 1, 2), "y": (1, 0, 2), "x": (2, 0, 1)}
 
 
-def lazy(d: np.ndarray | h5py.Dataset):
-    """A mapped volume as it is; a chunked h5 one read a slice at a time."""
+def lazy(d: np.ndarray | h5py.Dataset | Unheld):
+    """A mapped volume as it is; a chunked h5 one read a slice at a time; an
+    unheld one read whole, the views then holding nothing of its file."""
+    if isinstance(d, Unheld):
+        return np.asarray(d)
     return d if isinstance(d, np.ndarray) else da.from_array(d, chunks=(1, *d.shape[1:]))
 
 

@@ -25,12 +25,18 @@ def _layered(depth=150, n=48, band=(40, 99)):
     return vol
 
 
-@pytest.mark.parametrize("layout", [{}, {"chunks": (2, 12, 12), "compression": "gzip"}])
-def test_ortho_reads_the_planes_through_the_voxel(project, layout):
+CHUNKED = {"chunks": (2, 12, 12), "compression": "gzip"}
+
+
+@pytest.mark.parametrize("hold", [True, False])
+@pytest.mark.parametrize("layout", [{}, CHUNKED])
+def test_ortho_reads_the_planes_through_the_voxel(project, monkeypatch, layout, hold):
+    monkeypatch.setattr(volume, "HOLD", hold)
     vol = np.random.default_rng(0).normal(size=(10, 12, 14)).astype(np.float32)
     path = _volume(project.work_dir / "v.h5", vol, **layout)
     # tomoxide's contiguous layout is mapped; a chunked one is read through h5py.
-    assert isinstance(volume.data(path), np.memmap) == (not layout)
+    assert isinstance(volume.data(path), np.memmap) == (hold and not layout)
+    assert isinstance(volume.data(path), volume.Unheld) == (not hold)
     r = run(project, "volume.ortho", volume=path, z=3, y=4, x=5)
     assert r.at == (3, 4, 5) and r.shape == (10, 12, 14)
     for k, want in [("slice", vol[3]), ("xz", vol[:, 4, :]), ("yz", vol[:, :, 5])]:
@@ -42,15 +48,22 @@ def test_ortho_reads_the_planes_through_the_voxel(project, layout):
         run(project, "volume.ortho", volume=path, x=14)
 
 
-# Unfixed: volume.data keeps the volume mapped, and Windows replaces no
-# mapped file, so an overwrite fails while the GUI shows the volume.
-@pytest.mark.xfail(os.name == "nt", raises=PermissionError, strict=True, reason="a mapped file is not replaced")
-def test_a_replaced_volume_is_read_anew(project):
-    path = _volume(project.work_dir / "v.h5", np.zeros((4, 8, 8), np.float32))
+@pytest.mark.parametrize("layout", [{}, CHUNKED])
+def test_a_replaced_volume_is_read_anew(project, layout):
+    path = _volume(project.work_dir / "v.h5", np.zeros((4, 12, 12), np.float32), **layout)
     assert run(project, "volume.slice", volume=path).arrays["slice"].max() == 0
-    part = _volume(project.work_dir / "v.part.h5", np.ones((4, 8, 8), np.float32))
+    part = _volume(project.work_dir / "v.part.h5", np.ones((4, 12, 12), np.float32), **layout)
     os.replace(part, path)
     assert run(project, "volume.slice", volume=path).arrays["slice"].min() == 1
+
+
+def test_an_unheld_volume_replaced_by_another_shape_is_refused(project, monkeypatch):
+    monkeypatch.setattr(volume, "HOLD", False)
+    path = _volume(project.work_dir / "v.h5", np.zeros((4, 8, 8), np.float32))
+    d = volume.data(path)
+    os.replace(_volume(project.work_dir / "v.part.h5", np.ones((4, 8, 6), np.float32)), path)
+    with pytest.raises(Refused, match="is no longer the 4x8x8 float32 volume"):
+        d[0]
 
 
 def test_a_file_without_a_volume_is_refused(project):

@@ -8,6 +8,7 @@ A volume is an h5 with `exchange/data` [z, y, x], as `tomoxide recon` and
 from __future__ import annotations
 
 import json
+import os
 import threading
 from pathlib import Path
 from typing import Any
@@ -23,14 +24,42 @@ from lamino_pal.ops.registry import InPath, Params, Result, op
 from lamino_pal.render import window
 
 _lock = threading.Lock()
-_cached: tuple[tuple[str, int, int, int], np.ndarray | h5py.Dataset] | None = None
+# Windows replaces and deletes no file a process holds open or mapped: there a
+# volume is held between reads by nothing, so a job can overwrite it.
+HOLD = os.name != "nt"
 
 
-def data(path: str | Path) -> np.ndarray | h5py.Dataset:
+class Unheld:
+    """`exchange/data` of volume `path`, of `shape` and `dtype`, opened and
+    mapped anew by each read (a bin-1 yz plane 1.5 s every time)."""
+
+    def __init__(self, path: Path, shape: tuple[int, ...], dtype: np.dtype):
+        self.path, self.shape, self.dtype, self.ndim = path, shape, dtype, len(shape)
+
+    def __getitem__(self, idx) -> np.ndarray:
+        # The layout is read from the handle the voxels are: a file replaced
+        # since the last read is read as it is now, or refused.
+        with open(self.path, "rb") as fh, h5py.File(fh, "r") as f:
+            d = f.get("exchange/data")
+            if not isinstance(d, h5py.Dataset) or (d.shape, d.dtype) != (self.shape, self.dtype):
+                raise Refused(f"{self.path} is no longer the {'x'.join(map(str, self.shape))} {self.dtype} volume")
+            offset = d.id.get_offset()
+            if offset is None:
+                return d[idx]
+            return np.array(np.memmap(fh, self.dtype, "r", offset, self.shape)[idx])
+
+    def __array__(self, dtype=None) -> np.ndarray:
+        return np.asarray(self[...], dtype)
+
+
+_cached: tuple[tuple[str, int, int, int], np.ndarray | h5py.Dataset | Unheld] | None = None
+
+
+def data(path: str | Path) -> np.ndarray | h5py.Dataset | Unheld:
     """`exchange/data` of volume `path`, kept for the next call on the same
     file. Mapped when contiguous, as tomoxide writes it: a yz plane then costs
     its page faults once per process instead of an h5py read every time (bin
-    1: 1.5 s, then 0.05 s, against 5 s each)."""
+    1: 1.5 s, then 0.05 s, against 5 s each). Unheld where not `HOLD`."""
     global _cached
     path = Path(path).resolve()
     st = path.stat()
@@ -44,7 +73,10 @@ def data(path: str | Path) -> np.ndarray | h5py.Dataset:
                 f.close()
                 raise Refused(f"{path} has no 3-D exchange/data")
             offset = d.id.get_offset()
-            if offset is not None:
+            if not HOLD:
+                d = Unheld(path, d.shape, d.dtype)
+                f.close()
+            elif offset is not None:
                 d = np.memmap(path, dtype=d.dtype, mode="r", offset=offset, shape=d.shape)
                 f.close()
             _cached = (key, d)

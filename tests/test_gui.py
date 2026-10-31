@@ -49,7 +49,7 @@ from lamino_pal.gui.tabs.export import MIPS
 from lamino_pal.gui.tree import _key
 from lamino_pal.gui.viewer import Viewer
 from lamino_pal.jobs import JobState
-from lamino_pal.ops import REGISTRY
+from lamino_pal.ops import REGISTRY, volume
 from lamino_pal.ops.align import Rival, SweepResult, Verdict
 from lamino_pal.ops.raw import RangeResult, TiltFlowResult
 from lamino_pal.ops.volume import FocusResult
@@ -723,6 +723,18 @@ def test_the_volume_planes_follow_one_slider_once_and_3d_shows_the_binned_volume
         vt.view3d.model.dims.ndisplay = n
         pump(app, 0.1)
         assert vt.view3d.model.dims.ndisplay == n
+
+
+def test_the_volume_planes_of_an_unheld_volume_leave_its_file_replaceable(app, win, monkeypatch):
+    monkeypatch.setattr(volume, "HOLD", False)
+    win._select("volume", "v.h5")
+    vt = win.tabs["Volume"]
+    assert pump(app, 20, lambda: vt._fov is not None)
+    assert all(type(v.model.layers["v.h5"].data) is np.ndarray for v in vt.views.values())
+    path = win.project.work_dir / "v.h5"
+    part = path.with_name("v.part.h5")
+    part.write_bytes(path.read_bytes())
+    os.replace(part, path)
 
 
 def test_the_3d_window_is_that_of_what_its_rendering_draws(app, win):
