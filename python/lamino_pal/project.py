@@ -183,6 +183,9 @@ def _write(path: Path, data: ProjectFile) -> None:
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
+    # Windows opens no directory to fsync.
+    if not hasattr(os, "O_DIRECTORY"):
+        return
     dfd = os.open(path.parent, os.O_DIRECTORY)
     try:
         os.fsync(dfd)
