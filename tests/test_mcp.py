@@ -134,7 +134,7 @@ async def test_an_op_judged_by_eye_returns_its_image_saved_to_cite(project):
         assert json.loads(r.content[0].text) == r.structured_content
         assert fig["caption"].startswith("Slice z=2 [y, x], window [")
         (saved,) = (project.work_dir / FIGURES).iterdir()
-        assert fig["path"] == str(FIGURES / saved.name) and saved.name.endswith("-volume.slice.png")
+        assert fig["path"] == (FIGURES / saved.name).as_posix() and saved.name.endswith("-volume.slice.png")
         im = _image(r)
         assert (im.size, im.mode) == ((30, 20), "L")
         assert saved.read_bytes() == base64.b64decode(r.content[1].data)
@@ -235,7 +235,7 @@ async def test_a_job_judged_by_eye_returns_its_image_from_its_artifact(project, 
     # z [y, x] beside x turned to [y, z], above y [z, x].
     gap = 4
     assert _image(r).size == (20 + gap + 8, 16 + gap + 8)
-    assert fig["path"] == str(FIGURES / f"{jid}.png") and (project.work_dir / fig["path"]).exists()
+    assert fig["path"] == (FIGURES / f"{jid}.png").as_posix() and (project.work_dir / fig["path"]).exists()
 
 
 def test_slices_compared_by_eye_show_their_detail_zoomed_at_full_resolution():
