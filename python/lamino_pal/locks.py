@@ -1,5 +1,6 @@
 """Exclusive file locks between processes, as flock(2)'s on every platform:
-one per open file, held until the `locked` block ends."""
+one per open file, held until the `locked` block ends. And `replace`, the
+one rename onto a file others read."""
 
 from __future__ import annotations
 
@@ -79,3 +80,26 @@ def locked(
         finally:
             f.flush()
             _unlock(f)
+
+
+# Windows replaces no file another handle has open, and a reader of ours holds
+# one only for a read: a replace there waits the readers out.
+REPLACE_WAIT_S = 60.0 if os.name == "nt" else 0.0
+
+
+def replace(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+    """`os.replace`, once no reader holds `dst`."""
+    deadline = time.monotonic() + REPLACE_WAIT_S
+    while True:
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError as e:
+            if not REPLACE_WAIT_S:
+                raise
+            if time.monotonic() >= deadline:
+                raise PermissionError(
+                    f"{dst} was not replaced in {REPLACE_WAIT_S:g} s: "
+                    "another program holds it open, or it is read-only"
+                ) from e
+            time.sleep(0.05)

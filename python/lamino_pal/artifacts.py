@@ -12,6 +12,8 @@ from typing import Any
 import h5py
 import numpy as np
 
+from lamino_pal import locks
+
 
 # This process's scratch files in open `scratch` blocks.
 _scratch: set[Path] = set()
@@ -45,7 +47,7 @@ def written(path: str | os.PathLike[str]) -> Iterator[Path]:
     path.parent.mkdir(parents=True, exist_ok=True)
     with scratch(path.with_name(f".{path.stem}.part{path.suffix}")) as part:
         yield part
-        os.replace(part, path)
+        locks.replace(part, path)
 
 
 def save_h5(path: str | os.PathLike[str], meta: dict[str, Any], **arrays: np.ndarray) -> None:

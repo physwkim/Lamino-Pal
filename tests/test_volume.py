@@ -1,5 +1,7 @@
 import json
 import os
+import threading
+from pathlib import Path
 
 import h5py
 import numpy as np
@@ -7,7 +9,8 @@ import pytest
 from conftest import DATA
 from test_recon import _scan, run
 
-from lamino_pal import Refused, _core, dispatch
+from lamino_pal import Refused, _core, dispatch, locks
+from lamino_pal.artifacts import written
 from lamino_pal.ops import volume
 
 
@@ -64,6 +67,42 @@ def test_an_unheld_volume_replaced_by_another_shape_is_refused(project, monkeypa
     os.replace(_volume(project.work_dir / "v.part.h5", np.ones((4, 8, 6), np.float32)), path)
     with pytest.raises(Refused, match="is no longer the 4x8x8 float32 volume"):
         d[0]
+
+
+def _read_open(path, monkeypatch):
+    """`path` open as a read holds it; where not on Windows, refused a replace
+    while open as Windows refuses it."""
+    fh = open(path, "rb")
+    if os.name != "nt":
+        replace = os.replace
+
+        def refused_while_open(src, dst):
+            if not fh.closed and Path(dst) == Path(path):
+                raise PermissionError(13, "Access is denied", str(dst))
+            replace(src, dst)
+
+        monkeypatch.setattr(os, "replace", refused_while_open)
+        monkeypatch.setattr(locks, "REPLACE_WAIT_S", 60.0)
+    return fh
+
+
+def test_a_volume_being_read_is_replaced_once_the_read_ends(project, monkeypatch):
+    path = _volume(project.work_dir / "v.h5", np.zeros((4, 8, 8), np.float32))
+    threading.Timer(0.3, _read_open(path, monkeypatch).close).start()
+    with written(path) as part:
+        _volume(part, np.ones((4, 8, 8), np.float32))
+    assert run(project, "volume.slice", volume=path).arrays["slice"].min() == 1
+
+
+def test_a_volume_held_open_past_the_wait_is_left_as_it_was(project, monkeypatch):
+    path = _volume(project.work_dir / "v.h5", np.zeros((4, 8, 8), np.float32))
+    with _read_open(path, monkeypatch):
+        monkeypatch.setattr(locks, "REPLACE_WAIT_S", 0.3)
+        with pytest.raises(PermissionError, match="was not replaced in 0.3 s: another program holds it open"):
+            with written(path) as part:
+                _volume(part, np.ones((4, 8, 8), np.float32))
+    assert run(project, "volume.slice", volume=path).arrays["slice"].max() == 0
+    assert not list(project.work_dir.glob(".v.part*"))
 
 
 def test_a_file_without_a_volume_is_refused(project):

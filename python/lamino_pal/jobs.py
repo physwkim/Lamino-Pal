@@ -363,7 +363,7 @@ def _read(d: Path) -> JobState:
 def _write(d: Path, st: JobState) -> None:
     tmp = d / f".state.{os.getpid()}.{threading.get_ident()}.tmp"
     tmp.write_text(json.dumps(st.model_dump(mode="json"), indent=1), encoding="utf-8")
-    os.replace(tmp, d / "state.json")
+    locks.replace(tmp, d / "state.json")
 
 
 def _update(d: Path, **fields: Any) -> JobState:

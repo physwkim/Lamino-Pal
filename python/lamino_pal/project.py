@@ -182,7 +182,7 @@ def _write(path: Path, data: ProjectFile) -> None:
         tomli_w.dump(data.model_dump(mode="json", exclude_none=True), f)
         f.flush()
         os.fsync(f.fileno())
-    os.replace(tmp, path)
+    locks.replace(tmp, path)
     # Windows opens no directory to fsync.
     if not hasattr(os, "O_DIRECTORY"):
         return
