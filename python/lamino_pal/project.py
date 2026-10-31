@@ -116,7 +116,10 @@ def is_under(path: Path, root: Path) -> bool:
 class Project:
     def __init__(self, path: str | os.PathLike[str]):
         self.path = Path(path).resolve()
-        self.data = self._read()
+        if not self.path.is_file():
+            # Before its lock file is made beside it.
+            raise FileNotFoundError(f"no project file {self.path}")
+        self.reload()
 
     @classmethod
     def create(cls, path: str | os.PathLike[str], raw_root: str) -> Project:
@@ -142,7 +145,9 @@ class Project:
         return self.data.project.revision
 
     def reload(self) -> ProjectFile:
-        self.data = self._read()
+        # Under the lock: Windows refuses to replace a file another handle has open.
+        with self._lock():
+            self.data = self._read()
         return self.data
 
     def commit(self, mutation: Callable[[ProjectFile], None]) -> ProjectFile:

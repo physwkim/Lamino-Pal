@@ -232,7 +232,8 @@ def cancel(project: Project, jid: str) -> JobState:
 
 def run(d: Path) -> int:
     """The job process: run the op `d`'s state names and record how it ended."""
-    st = _read(d)
+    with _lock(d):
+        st = _read(d)
     project = Project(st.project)
     cancel_ = _core.CancelToken()
     signal.signal(signal.SIGTERM, lambda *_: cancel_.cancel())
