@@ -8,6 +8,7 @@ puts the project's interactive GPU there by executing itself again.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -26,5 +27,10 @@ def open_or_pin(path: str | os.PathLike[str] | None) -> Project | None:
     project = Project(path) if Path(path).exists() else None
     if ENV not in os.environ:
         gpu = (project.data.gpu if project else Gpu()).interactive
-        os.execve(sys.executable, [sys.executable, *sys.orig_argv[1:]], {**os.environ, ENV: str(gpu)})
+        argv, env = [sys.executable, *sys.orig_argv[1:]], {**os.environ, ENV: str(gpu)}
+        if os.name == "nt":
+            # Windows's exec ends this process, which whoever started it (an
+            # MCP client on its pipes) takes for the server's end.
+            sys.exit(subprocess.call(argv, env=env))
+        os.execve(sys.executable, argv, env)
     return project

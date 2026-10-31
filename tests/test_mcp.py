@@ -343,6 +343,15 @@ def _env():
     return {k: v for k, v in os.environ.items() if k != launch.ENV}
 
 
+async def test_the_stdio_server_answers_once_it_has_pinned_its_gpu(project):
+    server = StdioServerParameters(
+        command=sys.executable, args=["-m", "lamino_pal.mcp", "--project", str(project.path)], env=_env()
+    )
+    async with Client(server) as c:
+        r = await c.call_tool("project_info", {})
+    assert r.structured_content["path"] == str(project.path)
+
+
 async def test_the_stdio_server_runs_on_the_projects_interactive_gpu(project):
     project.commit(lambda f: setattr(f.gpu, "interactive", 1))
     server = StdioServerParameters(
