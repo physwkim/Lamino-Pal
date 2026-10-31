@@ -666,6 +666,13 @@ def test_a_preview_is_made_again_only_as_its_inputs_change_and_a_compare_shown_s
     assert not pt.cnr.isHidden() and "variant slice" in names(pt.view)
 
 
+def test_a_graph_saved_to_a_file_is_drawn_without_its_on_screen_hold(app, win, monkeypatch):
+    plot = win.tabs["Align"].plot
+    # Else matplotlib prints a callback's error and goes on.
+    monkeypatch.setattr(plot.getBackend().fig.canvas.callbacks, "exception_handler", None)
+    plot.saveGraph(io.BytesIO(), fileFormat="png")
+
+
 def test_a_graph_draws_its_hangul_title_in_a_font_that_has_it(app, scene, monkeypatch):
     from lamino_pal.gui.window import MainWindow
 

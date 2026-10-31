@@ -51,6 +51,9 @@ def _hold_plot(p: PlotWidget, e: DrawEvent) -> None:
     narrows, a failure can take many, and an axis's ×10ⁿ pushes the title up.
     Measured from the text, not the plot's place, which a layout too big for
     the figure leaves where it was."""
+    # A draw to a file is laid out by none, on another renderer.
+    if e.canvas.is_saving():
+        return
     b = p.getBackend()
     fig = b.fig
     pad = 2 * fig.get_layout_engine().get()["pad"] * rcParams["font.size"] / 72
