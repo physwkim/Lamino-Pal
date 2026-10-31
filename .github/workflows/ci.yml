@@ -51,9 +51,8 @@ jobs:
       - run: cargo clippy --all-targets --features cuda -- -D warnings
 
   # The cuda core and CLI as a Windows user builds them, each importing or
-  # building without a GPU. pwsh, not bash: Git's /usr/bin/link would stand in
-  # for MSVC's. One arch keeps nvcc short; windows-2022 because nvcc refuses an
-  # MSVC newer than its release knows.
+  # building without a GPU. One arch keeps nvcc short; windows-2022 because
+  # nvcc refuses an MSVC newer than its release knows.
   cuda-windows:
     name: cuda build (windows)
     runs-on: windows-2022
@@ -69,6 +68,9 @@ jobs:
           method: network
           sub-packages: '["nvcc", "nvvm", "crt", "cudart", "cufft", "cufft_dev"]'
       - uses: ilammy/msvc-dev-cmd@v1
+      # setup-micromamba puts Git's usr\bin, whose link is coreutils', ahead of
+      # MSVC on PATH, where rustc looks for the linker in a developer prompt.
+      - run: '"CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=${env:VCToolsInstallDir}bin\HostX64\x64\link.exe" >> $env:GITHUB_ENV'
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
