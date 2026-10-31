@@ -2,6 +2,7 @@
 in the job process by job_main.py."""
 
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -15,10 +16,14 @@ class StepsParams(OutputParams):
     n: int = 3
     dt: float = Field(0.05, ge=0)
     fail_at: int | None = None
-    child: bool = False  # start `sleep 60` in the job's process group; its pid in out.child
-    child_step: bool = False  # first wait on `sleep 60`, failing if it fails; its pid in out.child
+    child: bool = False  # start SLEEP as the job's child; its pid in out.child
+    child_step: bool = False  # first wait on SLEEP, failing if it fails; its pid in out.child
     reserved: float = 0.0  # a share reported at once before the steps, as recon ops reserve one
     out: OptOutPath = None
+
+
+# A minute's sleep on every platform.
+SLEEP = [sys.executable, "-c", "import time; time.sleep(60)"]
 
 
 class StepsResult(Result):
@@ -31,11 +36,11 @@ def _steps(ctx, p):
     """Sleep `dt` `n` times, reporting progress after each, while writing `out`."""
     with written(p.out) as part:
         part.write_text("")
-        child = subprocess.Popen(["sleep", "60"]).pid if p.child else None
+        child = subprocess.Popen(SLEEP).pid if p.child else None
         if child:
             Path(p.out + ".child").write_text(str(child))
         if p.child_step:
-            proc = subprocess.Popen(["sleep", "60"])
+            proc = subprocess.Popen(SLEEP)
             Path(p.out + ".child").write_text(str(proc.pid))
             if proc.wait() != 0:
                 raise RuntimeError(f"sleep exited {proc.returncode}")

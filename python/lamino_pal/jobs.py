@@ -24,6 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator, Literal
 
+import psutil
 from pydantic import BaseModel, ValidationError
 
 from lamino_pal import LaminoPalError, Refused, _core, artifacts, dispatch, locks
@@ -37,8 +38,8 @@ ACTIVE = ("queued", "running")
 # argv before the job directory; tests swap it to load their own ops.
 COMMAND = [sys.executable, "-m", "lamino_pal.cli", "job"]
 # How long a cancelled job may take to reach its next progress call before it
-# exits from under the op. An op inside one long tomoxide call hears SIGTERM
-# only when the call returns.
+# exits from under the op. An op inside one long tomoxide call hears the
+# cancel only when the call returns.
 CANCEL_GRACE_S = 10.0
 
 
@@ -55,11 +56,10 @@ class JobState(BaseModel):
     eta_s: float | None = None
     created: str
     finished: str | None = None
-    pid: int | None = None  # also the process group: jobs start a new session
-    proc_start: int | None = None  # its /proc starttime, against pid reuse
+    pid: int | None = None  # the job's while its last argument is the job's directory
     result: dict[str, Any] | None = None
     error: str | None = None
-    cancel_sent: str | None = None  # when `cancel` signalled the process
+    cancel_sent: str | None = None  # when `cancel` asked the job to stop
 
     @property
     def active(self) -> bool:
@@ -121,15 +121,15 @@ def submit(project: Project, name: str, params: dict[str, Any], caller: Caller) 
                     stderr=subprocess.STDOUT,
                     env=env,
                     cwd=project.work_dir,
+                    # Out of the reach of the terminal or console the GUI runs in.
                     start_new_session=True,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
         except OSError as e:
             _write(d, st.model_copy(update={"status": "failed", "error": f"could not start: {e}", "finished": _now()}))
             raise
-        # Read before anything reaps it: until then the pid cannot be reused.
-        start = _proc_start(proc.pid)
         threading.Thread(target=proc.wait, daemon=True).start()
-        st = st.model_copy(update={"pid": proc.pid, "proc_start": start})
+        st = st.model_copy(update={"pid": proc.pid})
         _write(d, st)
         entry.update(status="queued", job=st.id)
     return st
@@ -212,19 +212,20 @@ def wait(project: Project, jid: str, timeout_s: float) -> JobState:
 
 
 def cancel(project: Project, jid: str) -> JobState:
-    """SIGTERM job `jid`'s process group, once its pid is checked to still be
-    that job's process."""
+    """Ask job `jid` to stop: a running job stops its op and its children
+    itself; one whose process has not started its op yet is terminated, once
+    its pid is checked to still be that job's process."""
     d = _dir(project, jid)
     with _lock(d):
         st = _settle(d, _read(d))
         if not st.active:
             raise Refused(f"job {jid} is {st.status}")
-        try:
-            if not _alive(st) or os.getpgid(st.pid) != st.pid:
-                raise ProcessLookupError
-            os.killpg(st.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            raise Refused(f"job {jid}'s process {st.pid} is not running") from None
+        if st.status == "queued":
+            # `run` marks it running under this lock: it has run nothing yet.
+            try:
+                psutil.Process(st.pid).terminate()
+            except psutil.NoSuchProcess:
+                pass  # settled as stopped before it ran
         st = st.model_copy(update={"cancel_sent": _now()})
         _write(d, st)
     return st
@@ -232,8 +233,7 @@ def cancel(project: Project, jid: str) -> JobState:
 
 def run(d: Path) -> int:
     """The job process: run the op `d`'s state names and record how it ended."""
-    with _lock(d):
-        st = _read(d)
+    st = _state(d)
     project = Project(st.project)
     cancel_ = _core.CancelToken()
     signal.signal(signal.SIGTERM, lambda *_: cancel_.cancel())
@@ -277,7 +277,10 @@ def run(d: Path) -> int:
     deadline = None
     while w.is_alive():
         w.join(0.2)
-        if cancel_.is_cancelled() and deadline is None:
+        if deadline is None and (cancel_.is_cancelled() or _state(d).cancel_sent is not None):
+            # The token first: an op whose child dies under it is cancelled.
+            cancel_.cancel()
+            _stop_children()
             deadline = time.monotonic() + CANCEL_GRACE_S
         if deadline is not None and w.is_alive() and time.monotonic() >= deadline:
             dispatch.abandon("cancelled", "stopped inside a call")
@@ -297,8 +300,8 @@ def _settle(d: Path, st: JobState) -> JobState:
         # `submit` holds the lock until the pid is written.
         end = {"status": "failed", "error": "the submitting process ended before starting the job"}
     elif st.status == "queued" and st.cancel_sent is not None:
-        # The process records every end it lives through, but SIGTERM
-        # kills it outright until `run` installs its handler.
+        # The process records every end it lives through, but `cancel`
+        # terminates it until `run` starts the op.
         end = {"status": "cancelled", "message": "stopped before it ran"}
     else:
         end = {"status": "failed", "error": f"the job process ended without a result; see {d / 'out.log'}"}
@@ -317,18 +320,25 @@ def _pick_gpu(project: Project) -> int:
     return min(batch, key=lambda n: (queued[n] > 0 or dispatch.gpu_busy(n), queued[n], n))
 
 
-def _proc_start(pid: int) -> int | None:
-    """Field 22 of /proc/<pid>/stat, after the parenthesised comm."""
-    try:
-        stat = Path(f"/proc/{pid}/stat").read_text()
-    except OSError:
-        return None
-    fields = stat.rsplit(")", 1)[1].split()
-    return None if fields[0] == "Z" else int(fields[19])
+def _stop_children() -> None:
+    """Terminate the processes this job process started, theirs too."""
+    for c in psutil.Process().children(recursive=True):
+        try:
+            c.terminate()
+        except psutil.NoSuchProcess:
+            pass
 
 
 def _alive(st: JobState) -> bool:
-    return st.pid is not None and st.proc_start is not None and _proc_start(st.pid) == st.proc_start
+    # Its argv, not its start time: that moves with the system clock.
+    if st.pid is None:
+        return False
+    try:
+        p = psutil.Process(st.pid)
+        argv = p.cmdline()
+        return p.status() != psutil.STATUS_ZOMBIE and bool(argv) and Path(argv[-1]).name == st.id
+    except psutil.Error:
+        return False
 
 
 def _now() -> str:
@@ -339,6 +349,11 @@ def _now() -> str:
 def _lock(d: Path) -> Iterator[None]:
     with locks.locked(d / "state.lock"):
         yield
+
+
+def _state(d: Path) -> JobState:
+    with _lock(d):
+        return _read(d)
 
 
 def _read(d: Path) -> JobState:

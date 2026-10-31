@@ -204,8 +204,9 @@ fbp다). scan, geometry,
 `by = "agent"` 결정은 GUI에서 따로 표시되어 사람 확인을 받는다.
 
 **job.** job은 detached 프로세스다. GUI를 닫아도 batch는 계속 돌고, GUI와
-MCP가 같은 job을 본다. 상태는 `work_dir/jobs/<id>/state.json`(pid = pgid, pid
-재사용을 가리는 /proc starttime, op, params, progress, eta, result)에 있다.
+MCP가 같은 job을 본다. 상태는 `work_dir/jobs/<id>/state.json`(pid, op, params,
+progress, eta, result)에 있다. pid 재사용은 그 프로세스의 마지막 인자가 job
+디렉터리인지로 가린다(시작 시각은 시스템 시계를 따라 움직인다).
 params와 출력 경로는 제출할 때 검사하고, 대기 중인 job과 같은 출력도 그때 거절한다.
 GUI는 있는 출력을 덮어쓰지 않는 제출에 그 출력을 마지막으로 쓴 job이 답할 수 있으면
 새 job 대신 그 job을 보인다(`jobs.answering`). 그러려면 그 job이 done이고, params가
@@ -219,7 +220,9 @@ job 제출 뒤에 바뀌지 않았어야 한다. job은 group의 z_band 같은 �
 - job 프로세스는 `python -m lamino_pal.cli job <dir>`이고 `dispatch.run_job`으로
   op를 돌린다. `lamino-pal run --project P <op> [params.json]`은 같은 op를 셸에서
   foreground로 돌린다.
-- 취소는 자기 job의 process group에 SIGTERM을 보낸다. op는 다음 progress 호출에서
+- 취소는 state.json에 `cancel_sent`를 적는다. 실행 중인 job 프로세스는 0.2초마다
+  그것을 읽어 cancel token을 끊고 자기 자식 프로세스를 끝낸다. 아직 op를 시작하지
+  않은 job은 프로세스를 끝낸다. op는 다음 progress 호출에서
   멈추고, tomoxide 호출 안에서 10초 넘게 못 멈추면 job 프로세스가 스스로 끝난다.
   그때 finally가 돌지 않으므로, 열려 있는 scratch 파일(`artifacts.scratch`: 모든
   `.part`와 recon.run의 config)은 `artifacts.discard`가 지운다.
@@ -439,7 +442,7 @@ job state를 돌려준다. Codex 기본 `tool_timeout_sec` 60보다 짧게 잡�
 
 - raw root는 쓰기 금지(dispatcher 경로 검사).
 - 덮어쓰기는 명시할 때만 한다.
-- 취소는 자기 job state에 기록된 pgid에만 보낸다.
+- 취소가 끝내는 프로세스는 job state의 pid가 아직 그 job의 프로세스일 때뿐이다.
 - agent 결정은 `by = "agent"`로 남는다.
 
 **등록.** Claude Code:
@@ -500,7 +503,7 @@ skip이 아니라 실패로 처리한다.
   - registry의 op 집합 = MCP `list_tools`(고정 tool 제외) = GUI action 표.
   - 모든 op 호출이 log.jsonl에 남는다.
   - 두 writer가 동시에 `Project.commit`해도 revision이 단조 증가한다.
-  - job 취소는 자기 process group만 죽인다.
+  - job 취소는 자기 프로세스와 그 자식만 끝낸다.
 - golden (기존 산출물 대비):
   - `scan.import` step N1000 bin 2 → `step1000_bin2.h5`와 data/flat/theta 동일.
     fly 10개 → `build_fly_h5.py` 산출물과 동일.

@@ -362,13 +362,13 @@ def test_a_batch_row_whose_final_a_job_is_writing_reads_that_jobs_status(app, wi
     assert tab.table.item(0, 6).text() == "to make"
     out = dispatch.resolve(REGISTRY["recon.run"], {"tag": "s"}, win.project).out
     # The agent's job, which this window did not submit.
-    sleeper = subprocess.Popen(["sleep", "60"])
+    d = jobs.jobs_dir(win.project) / "j"
+    sleeper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", str(d)])
     try:
-        d = jobs.jobs_dir(win.project) / "j"
         d.mkdir(parents=True)
         st = JobState(
             id="j", project=str(win.project.path), op="recon.run", params={"tag": "s", "out": out}, caller="mcp",
-            gpu=0, status="running", created="", pid=sleeper.pid, proc_start=jobs._proc_start(sleeper.pid),
+            gpu=0, status="running", created="", pid=sleeper.pid,
         )
         jobs._write(d, st)
         assert pump(app, 3, lambda: tab.table.item(0, 6).text() == "running")

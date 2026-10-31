@@ -171,7 +171,7 @@ def logged(
         yield entry
     except BaseException as e:
         # A tomoxide call that took the cancel raises its own error, and a
-        # job's SIGTERM reaches the op's children too.
+        # job's cancel stops the op's children too.
         if cancelled():
             entry.update(status="cancelled", error=f"{type(e).__name__}: {e}")
             if isinstance(e, Cancelled):
