@@ -97,6 +97,14 @@ def test_submit_refuses_before_starting_anything_and_logs_why(project, name, par
     assert why in entry["error"]
 
 
+def test_a_gpu_job_on_a_core_without_cuda_is_refused_at_submit(project, monkeypatch):
+    monkeypatch.setattr(dispatch._core, "cuda_enabled", lambda: False)
+    with pytest.raises(Refused, match="test.gpu_steps runs on an NVIDIA GPU; this core is built without CUDA"):
+        jobs.submit(project, "test.gpu_steps", {}, "mcp")
+    assert jobs.list_(project) == []
+    assert last_log(project)["status"] == "refused"
+
+
 def test_an_existing_or_queued_output_is_refused_at_submit(project):
     first = jobs.submit(project, "test.steps", {"n": 2, "dt": 1.0}, "cli")
     out = re.escape(os.path.join("artifacts", "steps2.txt"))

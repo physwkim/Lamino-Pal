@@ -138,12 +138,16 @@ def _heeding(cancel: _core.CancelToken, progress: Progress | None) -> Progress:
 
 
 def lookup(name: str, job: bool) -> Op:
-    """Op `name`, refused unless it is a job op exactly when `job`."""
+    """Op `name`, refused unless it is a job op exactly when `job`, and a GPU
+    op on a core built without CUDA."""
     op = REGISTRY.get(name)
     if op is None:
         raise LaminoPalError(f"unknown op {name}")
     if (op.cost == "job") != job:
         raise LaminoPalError(f"{name} is a job op; submit it through jobs" if not job else f"{name} is not a job op")
+    # Such a core sees no GPU, which `_run` would take for a process pinned to none.
+    if op.gpu and not _core.cuda_enabled():
+        raise Refused(f"{name} runs on an NVIDIA GPU; this core is built without CUDA")
     return op
 
 

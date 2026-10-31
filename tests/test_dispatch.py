@@ -203,6 +203,15 @@ def test_a_fired_cancel_stops_the_op_at_its_next_progress_call(project, monkeypa
     assert _log(project)[-1]["status"] == "cancelled"
 
 
+def test_a_gpu_op_on_a_core_without_cuda_is_refused(project, monkeypatch):
+    o = build("test.gpu", cost="interactive", params=Params, result=Result, fn=_gpu, gpu=True)
+    monkeypatch.setitem(REGISTRY, "test.gpu", o)
+    monkeypatch.setattr(_core, "cuda_enabled", lambda: False)
+    with pytest.raises(Refused, match="test.gpu runs on an NVIDIA GPU; this core is built without CUDA"):
+        dispatch.run("test.gpu", {}, project=project, caller="cli")
+    assert _log(project)[-1]["status"] == "refused"
+
+
 @pytest.mark.gpu
 def test_a_gpu_op_runs_only_on_the_gpu_this_process_is_pinned_to(project, monkeypatch):
     o = build("test.gpu", cost="interactive", params=Params, result=Result, fn=_gpu, gpu=True)
