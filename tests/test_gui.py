@@ -8,6 +8,10 @@ import os
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 # Else offscreen draws through DISPLAY's GLX when it has one.
 os.environ["QT_QPA_OFFSCREEN_NO_GLX"] = "1"
+# Windows's offscreen reads fonts from Qt's own folder only, which pip's
+# PySide6 leaves empty; with no font, a glyph run's font has no family.
+if os.name == "nt":
+    os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ["SystemRoot"], "Fonts"))
 os.environ["QT_API"] = "pyside6"
 
 import re
