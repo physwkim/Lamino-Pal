@@ -3,8 +3,11 @@ name: CI
 # No runner has a GPU or nvcc: the core is built without `cuda`, the tests
 # marked gpu are left out, and the cuda build is type-checked only. Neither
 # has a runner the 261003 data the golden tests read.
+
+# A pull request's branch runs once, as the pull request.
 on:
   push:
+    branches: [main]
   pull_request:
 
 concurrency:
