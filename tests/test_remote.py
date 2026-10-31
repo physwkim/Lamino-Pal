@@ -26,6 +26,8 @@ def test_one_gui_serves_a_project_until_it_closes(tmp_path):
         third.close()
 
 
+# A Windows GUI serves a named pipe, which goes with its process.
+@pytest.mark.skipif(not hasattr(socket, "AF_UNIX"), reason="no Unix sockets")
 def test_a_dead_guis_socket_is_taken_over(tmp_path):
     p = tmp_path / "project.toml"
     sock, _ = remote._paths(p)

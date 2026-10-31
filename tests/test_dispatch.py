@@ -203,6 +203,7 @@ def test_a_fired_cancel_stops_the_op_at_its_next_progress_call(project, monkeypa
     assert _log(project)[-1]["status"] == "cancelled"
 
 
+@pytest.mark.gpu
 def test_a_gpu_op_runs_only_on_the_gpu_this_process_is_pinned_to(project, monkeypatch):
     o = build("test.gpu", cost="interactive", params=Params, result=Result, fn=_gpu, gpu=True)
     monkeypatch.setitem(REGISTRY, "test.gpu", o)

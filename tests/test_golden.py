@@ -11,6 +11,8 @@ import pytest
 from lamino_pal import dispatch
 from lamino_pal.project import Project
 
+pytestmark = pytest.mark.golden
+
 DATA = Path(os.environ.get("LAMINO_PAL_DATA", "~/work/261003_Lamino_test")).expanduser()
 
 # Proposed tag -> the original bin-2 file, and the projection pixels at 65535
@@ -46,7 +48,6 @@ def test_discover_finds_every_261003_scan(found):
     assert sorted(found[1]) == sorted(GOLDEN)
 
 
-@pytest.mark.golden
 @pytest.mark.parametrize("tag", list(GOLDEN))
 def test_import_equals_the_original_h5(found, run_job, tag):
     project, scans = found

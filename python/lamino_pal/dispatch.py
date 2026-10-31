@@ -5,7 +5,6 @@ The log entry is written here, in `finally`, so no op call escapes log.jsonl.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import tempfile
@@ -19,7 +18,7 @@ from typing import Any, Callable, Iterator, Literal
 
 from pydantic import BaseModel, ValidationError
 
-from lamino_pal import LaminoPalError, Refused, _core
+from lamino_pal import LaminoPalError, Refused, _core, locks
 from lamino_pal.ops.registry import REGISTRY, Op, Params, Result, _In, _Out
 from lamino_pal.project import Project, is_under
 
@@ -172,7 +171,7 @@ def logged(
         yield entry
     except BaseException as e:
         # A tomoxide call that took the cancel raises its own error, and a
-        # job's SIGTERM reaches the op's children too.
+        # job's cancel stops the op's children too.
         if cancelled():
             entry.update(status="cancelled", error=f"{type(e).__name__}: {e}")
             if isinstance(e, Cancelled):
@@ -271,31 +270,17 @@ def gpu_lock_path(n: int) -> Path:
 
 def gpu_busy(n: int) -> bool:
     """Whether some process holds GPU `n` now."""
-    with open(gpu_lock_path(n), "a+") as f:
-        try:
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return True
-        return False
+    with locks.locked(gpu_lock_path(n), wait_s=0) as f:
+        return f is None
 
 
 @contextmanager
 def gpu_lock(n: int, wait_s: float | None) -> Iterator[int]:
     """Hold GPU `n` exclusively across processes; refuse after `wait_s`, or
     wait for good with None."""
-    with open(gpu_lock_path(n), "a+") as f:
-        if wait_s is None:
-            fcntl.flock(f, fcntl.LOCK_EX)
-        deadline = time.monotonic() + (wait_s or 0.0)
-        while wait_s is not None:
-            try:
-                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.monotonic() >= deadline:
-                    f.seek(0)
-                    raise Refused(f"GPU {n} is busy ({f.read().strip() or 'holder unknown'})")
-                time.sleep(0.05)
+    with locks.locked(gpu_lock_path(n), "a+", wait_s) as f:
+        if f is None:
+            raise Refused(f"GPU {n} is busy ({gpu_lock_path(n).read_text().strip() or 'holder unknown'})")
         f.seek(0)
         f.truncate()
         f.write(f"pid {os.getpid()}")
@@ -305,6 +290,5 @@ def gpu_lock(n: int, wait_s: float | None) -> Iterator[int]:
 
 def _append_log(path: Path, entry: dict[str, Any]) -> None:
     line = json.dumps(entry, default=str, ensure_ascii=False) + "\n"
-    with open(path, "a", encoding="utf-8") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+    with locks.locked(path, encoding="utf-8") as f:
         f.write(line)

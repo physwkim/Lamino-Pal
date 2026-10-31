@@ -40,6 +40,8 @@ class JobsWidget(qt.QWidget):
         self.table.setHorizontalHeaderLabels(COLUMNS)
         self.table.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
         self.table.setEditTriggers(qt.QAbstractItemView.NoEditTriggers)
+        # The id names the op: elided, every job reads the same.
+        self.table.horizontalHeader().setSectionResizeMode(qt.QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.cancel = qt.QPushButton("Cancel selected")
         self.cancel.clicked.connect(self._cancel)

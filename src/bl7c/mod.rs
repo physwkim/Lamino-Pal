@@ -12,7 +12,7 @@ mod import;
 
 use std::fmt;
 use std::fs;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
@@ -166,22 +166,20 @@ fn names(dir: &Path) -> Result<Vec<String>, Error> {
 
 /// The scan at `raw` under `root`, with its frame lists and angles.
 pub(crate) fn open(root: &Path, raw: &str) -> Result<Layout, Error> {
-    if raw.is_empty()
-        || !Path::new(raw)
-            .components()
-            .all(|c| matches!(c, Component::Normal(_)))
-    {
-        return Err(Error::Refused(format!(
-            "raw {raw:?} is not a folder under the raw root"
-        )));
-    }
-    let dir = root.join(raw);
-    if !dir.is_dir() {
+    // Each name as its folder lists it, not as the file system finds it: a
+    // Mac's and Windows's also find another normalization or case. "", "."
+    // and ".." are never listed.
+    let dir = raw.split('/').try_fold(root.to_path_buf(), |dir, name| {
+        let mut es = fs::read_dir(&dir).ok()?;
+        es.any(|e| e.is_ok_and(|e| e.file_name() == name))
+            .then(|| dir.join(name))
+    });
+    let Some(dir) = dir.filter(|d| d.is_dir()) else {
         return Err(Error::Refused(format!(
             "raw {raw:?} is no folder under the raw root; pass it as scan.discover \
              lists it: names match byte for byte, and a Mac writes Korean as NFD"
         )));
-    }
+    };
     if dir.join("metadata.txt").is_file() {
         return open_fly(dir, raw);
     }
@@ -409,7 +407,15 @@ mod tests {
         assert_eq!(l.flat.len(), 1);
         let f = open(&tmp, "fly/F_00001").unwrap();
         assert_eq!(f.theta, [0.0, 90.0, 180.0, 270.0]);
-        for raw in ["", "../x", "/etc", "fly/../fly/F_00001"] {
+        for raw in [
+            "",
+            "../x",
+            "/etc",
+            "fly/../fly/F_00001",
+            "fly/F_00001/",
+            "FLY/F_00001",
+            "fly\\F_00001",
+        ] {
             assert!(matches!(open(&tmp, raw), Err(Error::Refused(_))), "{raw}");
         }
         assert!(matches!(

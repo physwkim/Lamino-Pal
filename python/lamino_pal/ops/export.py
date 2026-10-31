@@ -97,7 +97,7 @@ def window(ctx: Context, p: RangeParams) -> WindowResult:
     """The window `export.tiff16` maps slices [z0, z1) of volume `volume` to
     0–65535 with (p0.1–p99.9 of every 8th slice), and the histogram of those
     slices around it."""
-    ctx.progress(0.0, f"window: every {SAMPLE}th slice")
+    ctx.progress(0.0, f"every {SAMPLE}th slice")
     lo, hi, sample = window_of(p.volume, p.z)
     span = (lo - (hi - lo) / 2, hi + (hi - lo) / 2)
     hist, _ = np.histogram(sample, HIST_BINS, span)

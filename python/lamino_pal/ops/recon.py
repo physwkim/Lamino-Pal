@@ -8,7 +8,6 @@ sets the scan, its geometry and the output itself.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import shutil
@@ -24,10 +23,10 @@ import tomli_w
 from pydantic import AfterValidator, BaseModel, Field, model_validator
 
 import lamino_pal
-from lamino_pal import LaminoPalError, Refused, _core, scans, units
+from lamino_pal import LaminoPalError, Refused, _core, locks, scans, units
 from lamino_pal.artifacts import save_h5, scratch, written
 from lamino_pal.dispatch import Context
-from lamino_pal.ops.align import _decided_center, _slice, _stem, _tilt
+from lamino_pal.ops.align import _decided_center, _digest, _slice, _stem, _tilt
 from lamino_pal.ops.registry import OptOutPath, OutputParams, Params, Result, op
 from lamino_pal.project import Group, Project, Scan
 from lamino_pal.render import window
@@ -109,14 +108,15 @@ def _planes(
     recipe: dict[str, Any],
     at: tuple[int, int, int],
     span: tuple[float, float],
-    what: str,
+    part: str | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """The slice, xz and yz planes through `at`, reporting progress over
-    `span` of the op's."""
+    `span` of the op's, as its `part` when given."""
     lo, hi = span
 
     def on_rows(done: int, rh: int) -> None:
-        ctx.progress(lo + (hi - lo) * done / rh, f"{what}: row {done}/{rh}")
+        msg = f"row {done}/{rh}"
+        ctx.progress(lo + (hi - lo) * done / rh, msg if part is None else f"{part}: {msg}")
 
     c = units.center_for_scan(scan, p.center_px)
     return stack.planes(json.dumps(recipe), c, p.tilt_deg, at, on_rows)
@@ -143,7 +143,7 @@ def preview(ctx: Context, p: PreviewParams) -> PreviewResult:
     Arrays: `slice` [y, x], `xz` [z, x], `yz` [z, y]."""
     scan, group, stack = _stack(ctx, p.tag)
     at = _at(stack, scan, group, p, p.z, p.y, p.x)
-    sl, xz, yz = _planes(ctx, stack, scan, p, p.recipe, at, (0.05, 1.0), "preview")
+    sl, xz, yz = _planes(ctx, stack, scan, p, p.recipe, at, (0.05, 1.0))
     return PreviewResult(
         center_px=p.center_px,
         tilt_deg=p.tilt_deg,
@@ -168,7 +168,7 @@ class RecipesParams(Setup, Where, OutputParams):
     variants: list[Recipe] = Field(default_factory=lambda: [dict(v) for v in DEFAULT_VARIANTS], min_length=1)
     signal: Rect | None = None
     background: Rect | None = None
-    out: OptOutPath = None  # default artifacts/<tag>_recipes_c<center>_t<tilt>.h5
+    out: OptOutPath = None  # default artifacts/<tag>_recipes_c<center>_t<tilt>_<digest>.h5
 
     @model_validator(mode="after")
     def _both_rois(self) -> RecipesParams:
@@ -203,7 +203,7 @@ class RecipesResult(Result):
 
 
 def _recipes_out(p: RecipesParams, _: Project) -> dict[str, str]:
-    return {"out": f"artifacts/{p.tag}_recipes_c{_stem(p.center_px)}_t{_stem(p.tilt_deg)}.h5"}
+    return {"out": f"artifacts/{p.tag}_recipes_c{_stem(p.center_px)}_t{_stem(p.tilt_deg)}_{_digest(p)}.h5"}
 
 
 def _label(v: dict[str, Any]) -> str:
@@ -264,7 +264,7 @@ def compare(ctx: Context, p: RecipesParams) -> RecipesResult:
 
 
 class SplitParams(Setup, Where, OutputParams):
-    out: OptOutPath = None  # default artifacts/<tag>_split_c<center>_t<tilt>.h5
+    out: OptOutPath = None  # default artifacts/<tag>_split_c<center>_t<tilt>_<digest>.h5
 
 
 class SplitResult(Result):
@@ -279,7 +279,7 @@ class SplitResult(Result):
 
 
 def _split_out(p: SplitParams, _: Project) -> dict[str, str]:
-    return {"out": f"artifacts/{p.tag}_split_c{_stem(p.center_px)}_t{_stem(p.tilt_deg)}.h5"}
+    return {"out": f"artifacts/{p.tag}_split_c{_stem(p.center_px)}_t{_stem(p.tilt_deg)}_{_digest(p)}.h5"}
 
 
 FRC_THRESHOLD = 1 / 7
@@ -331,7 +331,7 @@ def split(ctx: Context, p: SplitParams) -> SplitResult:
         half = stack.select(list(range(first, nproj, 2)))
         counts.append(half.shape[0])
         span = (0.05 + 0.475 * i, 0.05 + 0.475 * (i + 1))
-        sl, xz, _ = _planes(ctx, half, scan, p, p.recipe, (z, y, x), span, ("even", "odd")[i])
+        sl, xz, _ = _planes(ctx, half, scan, p, p.recipe, (z, y, x), span, f"{('even', 'odd')[i]} half")
         del half
         slices.append(sl)
         xzs.append(xz)
@@ -388,7 +388,8 @@ CLI_CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "
 def tomoxide_cli() -> Path:
     """The tomoxide CLI of the core's own tomoxide commit, built by cargo from
     the submodule once and kept in `CLI_CACHE`."""
-    exe = CLI_CACHE / _core.tomoxide_rev() / "tomoxide"
+    # Windows runs only what its name says is a program.
+    exe = CLI_CACHE / _core.tomoxide_rev() / ("tomoxide.exe" if os.name == "nt" else "tomoxide")
     if exe.is_file():
         # Only a build that passed the checks below is kept.
         return exe
@@ -407,8 +408,7 @@ def tomoxide_cli() -> Path:
         raise Refused(f"the core was built from tomoxide {_core.tomoxide_rev()}, {tox} is at {rev}: rebuild the core")
     exe.parent.mkdir(parents=True, exist_ok=True)
     # Jobs that start together build it once.
-    with open(exe.parent / ".build.lock", "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with locks.locked(exe.parent / ".build.lock"):
         if not exe.is_file():
             with written(exe) as part:
                 shutil.copy2(_cargo_build(tox), part)

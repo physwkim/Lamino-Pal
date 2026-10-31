@@ -114,9 +114,9 @@ maturin cdylib, `abi3-py312`, feature `cuda`를 tomoxide로 전달. 의존: tomo
   (`.import.lock`) 돌며, tag 확인부터 commit까지 그 lock 안에 있다.
 - `bind`: tomoxide align API(`PreppedStack`, ring, register, `judge_sweep`)와
   필요한 projection만 읽어 prep하는 `prep::frames`의 얇은 wrapper. 무거운 호출은
-  `py.detach`로 GIL을 놓는다. center sweep은 `CancelToken`을 받아 angle chunk
-  사이에서 멈추고(그 앞의 filter는 끝까지 돈다), tilt scan은 tilt마다 부르는
-  callback이 예외를 내면 다음 tilt 전에 멈춘다. import progress callback은 GIL을 다시 잡고 호출하며 10 Hz로
+  `py.detach`로 GIL을 놓는다. center sweep은 `CancelToken`을 받아 filter tile과
+  angle chunk 사이에서, tilt scan은 tilt, stage chunk, 출력 tile 사이에서
+  멈추고, tilt scan은 tilt마다 부르는 callback이 예외를 내도 멈춘다. import progress callback은 GIL을 다시 잡고 호출하며 10 Hz로
   제한한다. 배열은 numpy로 복사해 반환한다(numpy crate의 ndarray 0.17과
   tomoxide의 0.16이 달라서; 프로세스 안에서만, MCP로는 나가지 않는다).
 - 오류는 `LaminoPalError` 하위 예외로 변환하며, guard 거부는 `Refused`(이유
@@ -204,8 +204,9 @@ fbp다). scan, geometry,
 `by = "agent"` 결정은 GUI에서 따로 표시되어 사람 확인을 받는다.
 
 **job.** job은 detached 프로세스다. GUI를 닫아도 batch는 계속 돌고, GUI와
-MCP가 같은 job을 본다. 상태는 `work_dir/jobs/<id>/state.json`(pid = pgid, pid
-재사용을 가리는 /proc starttime, op, params, progress, eta, result)에 있다.
+MCP가 같은 job을 본다. 상태는 `work_dir/jobs/<id>/state.json`(pid, op, params,
+progress, eta, result)에 있다. pid 재사용은 그 프로세스의 마지막 인자가 job
+디렉터리인지로 가린다(시작 시각은 시스템 시계를 따라 움직인다).
 params와 출력 경로는 제출할 때 검사하고, 대기 중인 job과 같은 출력도 그때 거절한다.
 GUI는 있는 출력을 덮어쓰지 않는 제출에 그 출력을 마지막으로 쓴 job이 답할 수 있으면
 새 job 대신 그 job을 보인다(`jobs.answering`). 그러려면 그 job이 done이고, params가
@@ -219,7 +220,9 @@ job 제출 뒤에 바뀌지 않았어야 한다. job은 group의 z_band 같은 �
 - job 프로세스는 `python -m lamino_pal.cli job <dir>`이고 `dispatch.run_job`으로
   op를 돌린다. `lamino-pal run --project P <op> [params.json]`은 같은 op를 셸에서
   foreground로 돌린다.
-- 취소는 자기 job의 process group에 SIGTERM을 보낸다. op는 다음 progress 호출에서
+- 취소는 state.json에 `cancel_sent`를 적는다. 실행 중인 job 프로세스는 0.2초마다
+  그것을 읽어 cancel token을 끊고 자기 자식 프로세스를 끝낸다. 아직 op를 시작하지
+  않은 job은 프로세스를 끝낸다. op는 다음 progress 호출에서
   멈추고, tomoxide 호출 안에서 10초 넘게 못 멈추면 job 프로세스가 스스로 끝난다.
   그때 finally가 돌지 않으므로, 열려 있는 scratch 파일(`artifacts.scratch`: 모든
   `.part`와 recon.run의 config)은 `artifacts.discard`가 지운다.
@@ -317,9 +320,9 @@ tilt ✓, z-band ✓, 재구성 n/m. 상태는 project에서 계산하고 따로
      drift와 tilt-flow 결과는 배지 없이 수치만 적는다.
 3. **Align**, 세 단계를 세로로:
    - **Rings.** ring center 선과 band별 marker를 그린다. prominence 배지는
-     ≥ 8이면 녹색, 미만이면 황색이다. R = 180 scan은 비활성화하고 "open arc —
-     ring 무효 (README: 462–467, 40 px 오차)"를 표시한 뒤 같은 group의 center를
-     쓰자고 제안한다.
+     ≥ 8이면 녹색, 미만이면 황색이다. R = 180 scan은 비활성화하고 "open arcs —
+     the rings center is invalid (README: 462–467, 40 px off)"를 표시한 뒤
+     같은 group의 center를 쓰자고 제안한다.
    - **Center.** sweep 결과의 score curve(silx)와 verdict 배지를 보여준다.
      candidate slice는 한 layer의 stack으로, 한 장씩 원래 크기로 slider(←/→)로
      넘기며 본다: 49장을 나란히 놓으면 작아서 분간되지 않는다. 모두 best의
@@ -330,15 +333,16 @@ tilt ✓, z-band ✓, 재구성 n/m. 상태는 project에서 계산하고 따로
      selected center"를 눌러서 한다(넘기기만으로는 정하지 않는다). "Compare by
      eye"의 candidate는 tile마다 center를 적은 montage 한 장이고, tile을 클릭해
      고른다(드래그는 view를 옮길 뿐이다). 고른 tile이 없으면 결정하지 않는다. Railed면
-     "범위 넓히기" 버튼을 낸다. 그 결과 slice가 비어 있으면(flat) z-band 경고를
+     "Widen range" 버튼을 낸다. 그 결과 slice가 비어 있으면(flat) z-band 경고를
      띄운다.
    - **Tilt.** tilt 목록으로 job을 돌린다. tilt마다 band 중간 slice(모든 tilt에서
      같은 층)를 montage 윗줄에, 그 tilt의 xz plane(가운데 row, 전체 depth)을
      아랫줄에 tile마다 tilt를 적어 놓는다. tomoxide `lamino_tilt_scan`이 streaming
-     중에 그 층과 xz를 모아 `TiltViews`로 넘긴다. focus curve는
-     "참고용: tilt에 따른 경향이 run마다 달라 판단 근거 아님"으로 표시하고, 결정은
-     tile을 클릭해 고르고(그 tilt의 두 tile에 테두리) "Decide selected tilt"를 눌러
-     eye로 한다. 고른 tile이 없으면 결정하지 않는다.
+     중에 그 층과 xz를 모아 `TiltViews`로 넘긴다. focus curve는 "for
+     reference: its trend with tilt differs from run to run, no basis to
+     decide"로 표시하고, 결정은 tile을 클릭해 고르고(그 tilt의 두 tile에
+     테두리) "Decide selected tilt"를 눌러 eye로 한다. 고른 tile이 없으면
+     결정하지 않는다.
      ALIGNMENT §6의 실패 방법은 메뉴에 두지 않는다.
 4. **Preview**
    - algorithm/filter/stripe/phase로 단일 slice와 ortho를 미리 본다. algorithm은
@@ -438,7 +442,7 @@ job state를 돌려준다. Codex 기본 `tool_timeout_sec` 60보다 짧게 잡�
 
 - raw root는 쓰기 금지(dispatcher 경로 검사).
 - 덮어쓰기는 명시할 때만 한다.
-- 취소는 자기 job state에 기록된 pgid에만 보낸다.
+- 취소가 끝내는 프로세스는 job state의 pid가 아직 그 job의 프로세스일 때뿐이다.
 - agent 결정은 `by = "agent"`로 남는다.
 
 **등록.** Claude Code:
@@ -499,7 +503,7 @@ skip이 아니라 실패로 처리한다.
   - registry의 op 집합 = MCP `list_tools`(고정 tool 제외) = GUI action 표.
   - 모든 op 호출이 log.jsonl에 남는다.
   - 두 writer가 동시에 `Project.commit`해도 revision이 단조 증가한다.
-  - job 취소는 자기 process group만 죽인다.
+  - job 취소는 자기 프로세스와 그 자식만 끝낸다.
 - golden (기존 산출물 대비):
   - `scan.import` step N1000 bin 2 → `step1000_bin2.h5`와 data/flat/theta 동일.
     fly 10개 → `build_fly_h5.py` 산출물과 동일.

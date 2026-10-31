@@ -108,6 +108,7 @@ def test_select_keeps_the_named_projections(turn):
         s.select([16])
 
 
+@pytest.mark.gpu
 def test_a_fired_cancel_stops_the_center_sweep(turn):
     s = _core.Stack(turn)
     sl = s.default_slice(20.0)
@@ -119,6 +120,7 @@ def test_a_fired_cancel_stops_the_center_sweep(turn):
         s.center_sweep(20.0, sl, [15.5, 16.0], cancel)
 
 
+@pytest.mark.gpu
 def test_a_fired_cancel_stops_the_tilt_scan(turn):
     s = _core.Stack(turn)
     assert len(json.loads(s.tilt_scan(16.0, [20.0], None, _core.CancelToken()))) == 1
@@ -128,6 +130,7 @@ def test_a_fired_cancel_stops_the_tilt_scan(turn):
         s.tilt_scan(16.0, [20.0], None, cancel)
 
 
+@pytest.mark.gpu
 def test_planes_cross_at_the_voxel(turn):
     s = _core.Stack(turn)
     recipe = json.dumps({"algorithm": "fourierrec"})

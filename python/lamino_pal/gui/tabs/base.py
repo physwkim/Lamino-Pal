@@ -51,6 +51,9 @@ def _hold_plot(p: PlotWidget, e: DrawEvent) -> None:
     narrows, a failure can take many, and an axis's ×10ⁿ pushes the title up.
     Measured from the text, not the plot's place, which a layout too big for
     the figure leaves where it was."""
+    # A draw to a file is laid out by none, on another renderer.
+    if e.canvas.is_saving():
+        return
     b = p.getBackend()
     fig = b.fig
     pad = 2 * fig.get_layout_engine().get()["pad"] * rcParams["font.size"] / 72
@@ -140,6 +143,10 @@ class Tab(qt.QWidget):
         p.getXAxis().setLabel(x)
         p.getYAxis().setLabel(y)
         p.setMinimumSize(*GRAPH_SIZE)
+        if cls is Plot1D:
+            # matplotlib's margins: a curve's peak or end on the frame is
+            # hidden under it. An image fills its frame.
+            p.setDataMargins(0.05, 0.05, 0.05, 0.05)
         # Its title wrapped at draw time, so the layout and the drawing agree,
         # and its least height held to that drawing.
         b = p.getBackend()
@@ -190,11 +197,11 @@ class Tab(qt.QWidget):
         """Op `op`'s figure of result `r`, saved to cite: its path under the
         work directory, None for an op without one."""
         fig = save_figure(self.project, op, r.model_dump(mode="json"), r.arrays, name or figure_name(op))
-        return None if fig is None else str(fig[0])
+        return None if fig is None else fig[0]
 
     def job_figure(self, st: JobState) -> str | None:
         fig = job_figure(self.project, st)
-        return None if fig is None else str(fig[0])
+        return None if fig is None else fig[0]
 
     def decide(self, field: str, value: Any, evidence: list[str | None], method: Method) -> None:
         """Decide `field` of the current group as the user."""

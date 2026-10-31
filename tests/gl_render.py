@@ -468,3 +468,29 @@ def test_a_layer_drawing_by_hand_keeps_the_left_drag(app):
     finally:
         v.close_canvas()
         v.close()
+
+
+@pytest.mark.parametrize("gesture, kept", [("click", False), ("roi", False), ("pan", True)])
+def test_a_shrunk_canvas_is_fit_again_unless_the_camera_was_moved(app, gesture, kept):
+    v = shown(app)
+    cam = v.model.camera
+    try:
+        if gesture == "roi":
+            roi = v.add_outlines(by_hand=True)
+            v.model.layers.selection.active = roi
+            roi.mode = "add_rectangle"
+        button = qt.Qt.MiddleButton if gesture == "pan" else qt.Qt.LeftButton
+        mouse(app, v, button, (200, 100), (200, 100) if gesture == "click" else (320, 180))
+        moved = cam.zoom, cam.center
+        # Preview's CNR table, shown below its viewer.
+        v.resize(600, 200)
+        pump(app, 0.3)
+        shown_ = cam.zoom, cam.center
+        if kept:
+            assert shown_ == moved
+        else:
+            v.model.reset_view()
+            assert shown_ == (cam.zoom, cam.center) != moved
+    finally:
+        v.close_canvas()
+        v.close()

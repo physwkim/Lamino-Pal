@@ -25,12 +25,18 @@ def _layered(depth=150, n=48, band=(40, 99)):
     return vol
 
 
-@pytest.mark.parametrize("layout", [{}, {"chunks": (2, 12, 12), "compression": "gzip"}])
-def test_ortho_reads_the_planes_through_the_voxel(project, layout):
+CHUNKED = {"chunks": (2, 12, 12), "compression": "gzip"}
+
+
+@pytest.mark.parametrize("hold", [True, False])
+@pytest.mark.parametrize("layout", [{}, CHUNKED])
+def test_ortho_reads_the_planes_through_the_voxel(project, monkeypatch, layout, hold):
+    monkeypatch.setattr(volume, "HOLD", hold)
     vol = np.random.default_rng(0).normal(size=(10, 12, 14)).astype(np.float32)
     path = _volume(project.work_dir / "v.h5", vol, **layout)
     # tomoxide's contiguous layout is mapped; a chunked one is read through h5py.
-    assert isinstance(volume.data(path), np.memmap) == (not layout)
+    assert isinstance(volume.data(path), np.memmap) == (hold and not layout)
+    assert isinstance(volume.data(path), volume.Unheld) == (not hold)
     r = run(project, "volume.ortho", volume=path, z=3, y=4, x=5)
     assert r.at == (3, 4, 5) and r.shape == (10, 12, 14)
     for k, want in [("slice", vol[3]), ("xz", vol[:, 4, :]), ("yz", vol[:, :, 5])]:
@@ -42,12 +48,22 @@ def test_ortho_reads_the_planes_through_the_voxel(project, layout):
         run(project, "volume.ortho", volume=path, x=14)
 
 
-def test_a_replaced_volume_is_read_anew(project):
-    path = _volume(project.work_dir / "v.h5", np.zeros((4, 8, 8), np.float32))
+@pytest.mark.parametrize("layout", [{}, CHUNKED])
+def test_a_replaced_volume_is_read_anew(project, layout):
+    path = _volume(project.work_dir / "v.h5", np.zeros((4, 12, 12), np.float32), **layout)
     assert run(project, "volume.slice", volume=path).arrays["slice"].max() == 0
-    part = _volume(project.work_dir / "v.part.h5", np.ones((4, 8, 8), np.float32))
+    part = _volume(project.work_dir / "v.part.h5", np.ones((4, 12, 12), np.float32), **layout)
     os.replace(part, path)
     assert run(project, "volume.slice", volume=path).arrays["slice"].min() == 1
+
+
+def test_an_unheld_volume_replaced_by_another_shape_is_refused(project, monkeypatch):
+    monkeypatch.setattr(volume, "HOLD", False)
+    path = _volume(project.work_dir / "v.h5", np.zeros((4, 8, 8), np.float32))
+    d = volume.data(path)
+    os.replace(_volume(project.work_dir / "v.part.h5", np.ones((4, 8, 6), np.float32)), path)
+    with pytest.raises(Refused, match="is no longer the 4x8x8 float32 volume"):
+        d[0]
 
 
 def test_a_file_without_a_volume_is_refused(project):
@@ -109,6 +125,25 @@ def test_valid_fov_takes_the_scan_center_and_tilt_from_the_provenance(project):
     assert r.arrays["radius"].tolist() == want["radius"] and "radius" not in r.model_dump()
     with pytest.raises(Refused, match=f"is {depth}x64x64; scan s at tilt 30.0 reconstructs"):
         run(project, "volume.valid_fov", volume=path, tilt_deg=30.0)
+
+
+def test_valid_fov_of_a_binned_volume_is_in_its_voxels(project, run_job):
+    _scan(project, "s", shape=(32, 64))
+    depth = _core.lamino_depth(32, 20.0)
+    path = _volume(project.work_dir / "v.h5", np.zeros((depth, 64, 64), np.float32))
+    with h5py.File(path, "r+") as f:
+        f.require_group("lamino_pal/provenance").attrs.update(tag="s", center_px=64.5, tilt_deg=20.0, bin=2)
+    binned = run_job(project, "export.bin", {"volume": path}).artifacts[0]
+    full = json.loads(_core.valid_fov(64, 32, 32.0, 20.0))
+    r = run(project, "volume.valid_fov", volume=binned)
+    # Whole at full resolution on slices 13..23: binned, the pairs 14..23.
+    assert (full["full_z"], r.r_lateral, r.full_z) == ([13, 23], 16.0, (7, 11))
+    assert len(r.arrays["radius"]) == depth // 2
+    assert r.arrays["radius"][6] == full["radius"][12] / 2 < 16.0
+    with h5py.File(binned, "r+") as f:
+        f["lamino_pal/provenance"].attrs["bin"] = 3
+    with pytest.raises(Refused, match="is bin 3, not a multiple of scan s's bin 2"):
+        run(project, "volume.valid_fov", volume=binned)
 
 
 @pytest.mark.golden

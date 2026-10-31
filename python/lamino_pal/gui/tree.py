@@ -64,7 +64,7 @@ class ProjectTree(qt.QObject):
         if arts:
             a = self._item(self.tree, "Artifacts", None)
             for path in arts:
-                rel = str(path.relative_to(self.project.work_dir))
+                rel = path.relative_to(self.project.work_dir).as_posix()
                 self._item(a, path.name, ("artifact", rel))
         self.tree.expandToDepth(1)
         if keep is not None:

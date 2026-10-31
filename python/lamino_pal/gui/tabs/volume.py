@@ -19,7 +19,7 @@ from lamino_pal.gui.tabs.base import BAD, GOOD, WARN, Tab, badge, button, spin
 from lamino_pal.jobs import JobState
 from lamino_pal.mcp import figures
 from lamino_pal.ops.registry import Result
-from lamino_pal.ops.volume import data, provenance
+from lamino_pal.ops.volume import Unheld, data, provenance
 from lamino_pal.render import window
 
 # What each rendering draws along a ray; None draws the voxels themselves.
@@ -35,8 +35,11 @@ RENDERING = {
 VIEWS = {"z": (0, 1, 2), "y": (1, 0, 2), "x": (2, 0, 1)}
 
 
-def lazy(d: np.ndarray | h5py.Dataset):
-    """A mapped volume as it is; a chunked h5 one read a slice at a time."""
+def lazy(d: np.ndarray | h5py.Dataset | Unheld):
+    """A mapped volume as it is; a chunked h5 one read a slice at a time; an
+    unheld one read whole, the views then holding nothing of its file."""
+    if isinstance(d, Unheld):
+        return np.asarray(d)
     return d if isinstance(d, np.ndarray) else da.from_array(d, chunks=(1, *d.shape[1:]))
 
 
@@ -171,18 +174,21 @@ class VolumeTab(Tab):
             v.add_outlines(name="cross", edge_color="yellow")
         self.shape = d.shape
         self.at = [nz // 2, ny // 2, nx // 2]
-        what = ", ".join(f"{k} {prov[k]}" for k in ("tag", "bin", "center_px", "tilt_deg") if k in prov)
+        shown = {"tag": "tag {}", "bin": "bin {}", "center_px": "center {:.2f} px", "tilt_deg": "tilt {:g}°"}
+        what = ", ".join(f.format(prov[k]) for k, f in shown.items() if k in prov)
         self.info.setText(f"<b>{vol}</b> {nz}×{ny}×{nx} {d.dtype}" + (f"; {what}" if what else "; no provenance"))
         for s in (self.z0, self.z1):
             s.setRange(0, nz - 1)
+        # The group's band, else every slice: never the last volume's band.
+        z0, z1 = 0, nz - 1
         g = self.win.find_group()
         zb = None if g is None else g.z_band
         if zb is not None and {"bin", "tilt_deg"} <= prov.keys():
             # A band read at another binning is not shown.
             with contextlib.suppress(Refused):
                 z0, z1 = units.band_for(zb, prov["bin"], prov["tilt_deg"], nz)
-                self.z0.setValue(z0)
-                self.z1.setValue(z1)
+        self.z0.setValue(z0)
+        self.z1.setValue(z1)
         self._goto()
         self.run("volume.valid_fov", {"volume": vol}, self._show_fov, channel="volume-fov", failed=self._no_fov)
         if self.pages.currentIndex() == 1:

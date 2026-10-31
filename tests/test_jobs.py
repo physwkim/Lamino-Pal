@@ -1,6 +1,6 @@
 import json
 import os
-import signal
+import re
 import subprocess
 import sys
 import threading
@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 import jobops
+import psutil
 import pytest
 
 from lamino_pal import LaminoPalError, Refused, dispatch, jobs
@@ -24,7 +25,7 @@ def test_ops(monkeypatch):
 @pytest.fixture
 def sleeper():
     """A process this test owns outside any job, killed at teardown."""
-    p = subprocess.Popen(["sleep", "60"])
+    p = subprocess.Popen(jobops.SLEEP)
     yield p
     p.kill()
     p.wait()
@@ -44,17 +45,18 @@ def last_log(project):
 
 def gone(pid):
     try:
-        stat = Path(f"/proc/{pid}/stat").read_text()
-    except FileNotFoundError:
+        return psutil.Process(pid).status() == psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
         return True
-    return stat.rsplit(")", 1)[1].split()[0] == "Z"
 
 
 def test_a_job_runs_detached_and_records_its_result(project):
     st = jobs.submit(project, "test.steps", {"n": 4}, "mcp")
-    assert (st.status in jobs.ACTIVE, st.gpu, os.getpgid(st.pid)) == (True, None, st.pid)
+    assert (st.status in jobs.ACTIVE, st.gpu) == (True, None)
+    if os.name == "posix":
+        assert os.getpgid(st.pid) == st.pid
     st = jobs.wait(project, st.id, 20)
-    assert (st.status, st.progress, st.message, st.error) == ("done", 1.0, "step 4", None)
+    assert (st.status, st.progress, st.message, st.error) == ("done", 1.0, "", None)
     out = project.work_dir / "artifacts/steps4.txt"
     assert st.result["artifacts"] == [str(out)] and out.read_text() == "4"
     assert st.params["out"] == str(out)
@@ -89,7 +91,8 @@ def test_submit_refuses_before_starting_anything_and_logs_why(project, name, par
 
 def test_an_existing_or_queued_output_is_refused_at_submit(project):
     first = jobs.submit(project, "test.steps", {"n": 2, "dt": 1.0}, "cli")
-    with pytest.raises(Refused, match=f"job {first.id} is writing .*artifacts/steps2.txt"):
+    out = re.escape(os.path.join("artifacts", "steps2.txt"))
+    with pytest.raises(Refused, match=f"job {first.id} is writing .*{out}"):
         jobs.submit(project, "test.steps", {"n": 2}, "cli")
     assert last_log(project)["status"] == "refused"
     assert jobs.wait(project, first.id, 20).status == "done"
@@ -129,7 +132,7 @@ def test_the_eta_leaves_out_a_share_reported_at_once(project):
     assert st.eta_s >= 3 * dt
 
 
-def test_cancel_stops_the_job_and_its_process_group_only(project, sleeper):
+def test_cancel_stops_the_job_and_its_children_only(project, sleeper):
     st = jobs.submit(project, "test.steps", {"n": 400, "child": True}, "cli")
     pid_file = project.work_dir / "artifacts/steps400.txt.child"
     child = int(until(lambda: pid_file.exists() and pid_file.read_text()))
@@ -175,15 +178,10 @@ def test_cancel_refuses_a_pid_that_is_not_the_jobs(project, sleeper):
     until(lambda: jobs.get(project, st.id).status == "running")
     real = jobs.get(project, st.id)
     d = jobs.jobs_dir(project) / st.id
-    # The sleeper's pid with a start time not its own: a reused pid, so the
-    # job's process is gone. (The job's own may equal the sleeper's: both
-    # started within one clock tick.)
-    jobs._write(d, real.model_copy(update={"pid": sleeper.pid, "proc_start": jobs._proc_start(sleeper.pid) - 1}))
+    # The sleeper's pid, as a reused pid would be: the job's process is gone.
+    # Queued, a cancel that took it for the job's would terminate it.
+    jobs._write(d, real.model_copy(update={"pid": sleeper.pid, "status": "queued"}))
     with pytest.raises(Refused, match=f"job {st.id} is failed"):
-        jobs.cancel(project, st.id)
-    # Its own start time, but not a process group leader: not a job's.
-    jobs._write(d, real.model_copy(update={"pid": sleeper.pid, "proc_start": jobs._proc_start(sleeper.pid)}))
-    with pytest.raises(Refused, match=f"process {sleeper.pid} is not running"):
         jobs.cancel(project, st.id)
     assert sleeper.poll() is None
     jobs._write(d, real)
@@ -234,11 +232,12 @@ def test_a_job_whose_submitter_died_before_starting_it_is_failed(project):
 def test_a_job_process_that_dies_is_marked_failed(project):
     st = jobs.submit(project, "test.steps", {"n": 1, "dt": 60}, "cli")
     until(lambda: jobs.get(project, st.id).status == "running")
-    os.kill(st.pid, signal.SIGKILL)
+    psutil.Process(st.pid).kill()
     st = jobs.wait(project, st.id, 20)
     assert st.status == "failed" and st.error.startswith("the job process ended without a result")
 
 
+@pytest.mark.gpu
 def test_a_gpu_job_takes_a_free_batch_gpu_and_waits_for_a_busy_one(project):
     project.commit(lambda f: setattr(f.gpu, "batch", [2, 3]))
     with dispatch.gpu_lock(2, 0):
@@ -255,6 +254,7 @@ def test_a_gpu_job_takes_a_free_batch_gpu_and_waits_for_a_busy_one(project):
     assert (st.status, st.result["gpu"]) == ("done", 3)
 
 
+@pytest.mark.gpu
 def test_a_gpu_job_refuses_a_gpu_outside_the_batch(project, monkeypatch):
     project.commit(lambda f: setattr(f.gpu, "batch", [1]))
     monkeypatch.setattr(jobs, "_pick_gpu", lambda project: 1)

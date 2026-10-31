@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -55,7 +56,24 @@ def test_bind_freezes_the_decisions_and_names_the_volume_by_them(project):
     assert Path(p.out) == project.work_dir / "final_s_bin2_c64p5_t19p5_fourierrec_shepp.h5"
     p = validate(project, "recon.split", tag="s", recipe={"filter_name": "shepp"})
     assert p.recipe == {"filter_name": "shepp"}
-    assert Path(p.out) == project.work_dir / "artifacts/s_split_c64p5_t19p5.h5"
+    assert re.fullmatch(r"s_split_c64p5_t19p5_[0-9a-f]{6}\.h5", Path(p.out).name)
+
+
+def test_an_analysis_output_is_named_by_every_param(project):
+    _scan(project, "s")
+    _decide(project, "s", center_px=64.5, tilt_deg=19.5)
+    roi = {"signal": (20, 30, 20, 30), "background": (34, 44, 34, 44)}
+    out = validate(project, "recon.compare", tag="s", **roi).out
+    assert validate(project, "recon.compare", tag="s", **roi).out == out
+    # Each pair differs in a param its name does not show.
+    pairs = [
+        ("recon.compare", {**roi, "background": (34, 44, 38, 48)}, roi),
+        ("recon.split", {"z": 2}, {"z": 3}),
+        ("align.tilt_scan", {"tilts_deg": [18.0, 22.0]}, {"tilts_deg": [18.0, 20.0, 22.0]}),
+        ("align.center_compare", {"centers_px": [60.0, 68.0]}, {"centers_px": [60.0, 64.0, 68.0]}),
+    ]
+    for name, a, b in pairs:
+        assert validate(project, name, tag="s", **a).out != validate(project, name, tag="s", **b).out, name
 
 
 def test_a_recipe_may_not_set_what_lamino_pal_sets(project):
@@ -92,6 +110,7 @@ def test_reconstruction_needs_a_decided_center_and_a_final_one_a_decided_tilt(pr
     assert validate(project, "recon.run", tag="s", tilt_deg=20.0).tilt_deg == 20.0
 
 
+@pytest.mark.gpu
 def test_preview_crosses_its_planes_at_the_voxel(project):
     _scan(project, "s")
     _decide(project, "s", center_px=64.5)
@@ -109,9 +128,10 @@ def test_preview_crosses_its_planes_at_the_voxel(project):
     assert sl.shape == (64, 64) and yz.shape == (r.depth, 64)
     np.testing.assert_array_equal(xz[z], sl[y])
     np.testing.assert_array_equal(yz[z], sl[:, x])
-    assert seen[-1] == f"preview: row {r.depth}/{r.depth}"
+    assert seen[-1] == f"row {r.depth}/{r.depth}"
 
 
+@pytest.mark.gpu
 def test_preview_takes_the_middle_of_the_band_carried_to_its_tilt(project):
     _scan(project, "s", shape=(64, 64))
     _decide(project, "s", center_px=64.5)
@@ -124,14 +144,17 @@ def test_preview_takes_the_middle_of_the_band_carried_to_its_tilt(project):
     assert (r.depth, r.at[0]) == (d40, (lo + hi) // 2)
 
 
+@pytest.mark.gpu
 def test_compare_keeps_each_variant_and_its_cnr(project, run_job):
     _scan(project, "s")
     _decide(project, "s", center_px=64.5)
     variants = [{}, {"filter_name": "shepp"}]
     roi = {"signal": (20, 30, 20, 30), "background": (34, 44, 34, 44)}
     params = {"tag": "s", "recipe": {"algorithm": "fourierrec"}, "variants": variants, **roi}
-    r = run_job(project, "recon.compare", params)
+    seen = []
+    r = run_job(project, "recon.compare", params, lambda f, m: seen.append(m))
     assert [v.label for v in r.variants] == ["recipe", "filter_name=shepp"]
+    assert seen[-1].startswith("filter_name=shepp: row ")
     meta, arrays = load_h5(r.artifacts[0])
     assert arrays["slice"].shape == (2, 64, 64) and arrays["xz"].shape[0] == 2
     for v, sl in zip(r.variants, arrays["slice"]):
@@ -143,12 +166,15 @@ def test_compare_keeps_each_variant_and_its_cnr(project, run_job):
         run_job(project, "recon.compare", params)
 
 
+@pytest.mark.gpu
 def test_split_reconstructs_each_half_alone(project, run_job):
     # Tall and wide enough for a disk past the FRC taper.
     _scan(project, "s", shape=(32, 160))
     _decide(project, "s", center_px=160.5)
-    r = run_job(project, "recon.split", {"tag": "s", "recipe": {"algorithm": "fourierrec"}})
-    assert r.nproj == (8, 8)
+    seen = []
+    params = {"tag": "s", "recipe": {"algorithm": "fourierrec"}}
+    r = run_job(project, "recon.split", params, lambda f, m: seen.append(m))
+    assert r.nproj == (8, 8) and seen[-1].startswith("odd half: row ")
     assert r.radius_px >= 32
     meta, arrays = load_h5(r.artifacts[0])
     assert arrays["slice"].shape == (2, 160, 160) and arrays["frc"].shape == (80,)
@@ -204,6 +230,7 @@ with h5py.File(out, "w") as f:
 """
 
 
+@pytest.mark.gpu
 def test_run_writes_the_volume_with_its_provenance_and_leaves_nothing_else(
     project, run_job, tmp_path, monkeypatch, capsys
 ):
@@ -238,6 +265,7 @@ def test_run_writes_the_volume_with_its_provenance_and_leaves_nothing_else(
     assert capsys.readouterr().out.startswith("tomoxide 0.0.0 (fake)\n")
 
 
+@pytest.mark.gpu
 def test_a_failed_run_says_why_and_leaves_nothing(project, run_job, tmp_path, monkeypatch):
     _scan(project, "s")
     _decide(project, "s", center_px=64.5, tilt_deg=20.0)
@@ -279,15 +307,20 @@ def test_the_cli_is_built_only_from_the_cores_own_commit_and_kept(tmp_path, monk
     built.write_text("#!/bin/sh\n")
     built.chmod(0o755)
     msg = {"reason": "compiler-artifact", "target": {"name": "tomoxide"}, "executable": str(built)}
-    (bin_ / "cargo").write_text(f"#!/bin/sh\necho '{json.dumps(msg)}'\n")
-    (bin_ / "cargo").chmod(0o755)
-    monkeypatch.setenv("PATH", f"{bin_}:{os.environ['PATH']}")
+    if os.name == "nt":
+        (bin_ / "cargo.bat").write_text(f"@echo {json.dumps(msg)}\n")
+    else:
+        (bin_ / "cargo").write_text(f"#!/bin/sh\necho '{json.dumps(msg)}'\n")
+        (bin_ / "cargo").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_}{os.pathsep}{os.environ['PATH']}")
     exe = recon.tomoxide_cli()
-    assert exe == tmp_path / "cache" / rev / "tomoxide" and os.access(exe, os.X_OK)
-    assert sorted(p.name for p in exe.parent.iterdir()) == [".build.lock", "tomoxide"]
+    name = "tomoxide.exe" if os.name == "nt" else "tomoxide"
+    assert exe == tmp_path / "cache" / rev / name and os.access(exe, os.X_OK)
+    assert sorted(p.name for p in exe.parent.iterdir()) == [".build.lock", name]
     # Kept: neither the source nor cargo is needed again.
     shutil.rmtree(bin_)
-    shutil.rmtree(tox)
+    # Moved, not removed: Windows's git leaves its objects read-only.
+    tox.rename(tox.with_name("moved"))
     assert recon.tomoxide_cli() == exe
 
 
@@ -307,6 +340,7 @@ def _nrmse(a, b):
     return np.sqrt(((a - b) ** 2).sum() / (b**2).sum())
 
 
+@pytest.mark.gpu
 @pytest.mark.golden
 def test_compare_equals_the_cli_volume_of_each_variant(golden_project, run_job):
     params = {"tag": "step1000", "center_px": 1008.5, "tilt_deg": 20.0, "recipe": GOLDEN_RECIPE}
@@ -321,6 +355,7 @@ def test_compare_equals_the_cli_volume_of_each_variant(golden_project, run_job):
             assert _nrmse(arrays["xz"][i], d[:, y, :]) < 3e-6, name
 
 
+@pytest.mark.gpu
 @pytest.mark.golden
 def test_split_on_step1000(golden_project, run_job):
     params = {"tag": "step1000", "center_px": 1008.5, "tilt_deg": 20.0, "recipe": GOLDEN_RECIPE}
@@ -333,6 +368,7 @@ def test_split_on_step1000(golden_project, run_job):
     assert r.resolution_px == pytest.approx(1024 / 74)
 
 
+@pytest.mark.gpu
 @pytest.mark.golden
 def test_run_equals_the_cli_volume(golden_project, run_job):
     params = {"tag": "step1000", "center_px": 1008.5, "tilt_deg": 20.0, "recipe": GOLDEN_RECIPE}

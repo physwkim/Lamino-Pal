@@ -19,8 +19,8 @@ from lamino_pal.ops.registry import Result
 from lamino_pal.render import GAP, grid, origins, png, to_u8, window
 
 TRUSTWORTHY = 8.0  # ring prominence, `align.rings`
-OPEN_ARC = "open arc — ring 무효 (README: 462–467, 40 px 오차)"
-TILT_FOCUS = "참고용: tilt에 따른 경향이 run마다 달라 판단 근거 아님"
+OPEN_ARC = "open arcs — the rings center is invalid (README: 462–467, 40 px off)"
+TILT_FOCUS = "for reference: its trend with tilt differs from run to run, no basis to decide"
 # The graph's markers are named in its title: silx writes a marker's text at
 # the plot's top, where the texts of close markers overlap.
 PICKED = "picked (blue)"
@@ -93,7 +93,7 @@ class AlignTab(Tab):
         sweep.addRow("tilt °", self.tilt)
         sweep.addRow("slice", self.slice)
         sweep.addRow(button("Sweep", self.sweep))
-        self.widen = button("범위 넓히기", self._widen, "the peak is at an edge: sweep again around it, twice as wide")
+        self.widen = button("Widen range", self._widen, "the peak is at an edge: sweep again around it, twice as wide")
         self.widen.hide()
         sweep.addRow(self.widen)
         sweep.addRow(button("Compare by eye", self.compare, "the best and its rivals reconstructed whole (job)"))
@@ -365,7 +365,7 @@ class AlignTab(Tab):
         layer = self.view.model.layers["sweep"]
         img = png(to_u8(layer.data[self._values.index(c)], tuple(layer.contrast_limits)))
         name = figure_name("align.center_sweep").replace(".png", f"-c{c:.2f}.png")
-        return str(figures.save(self.project.work_dir, name, img))
+        return figures.save(self.project.work_dir, name, img)
 
     # Tilt ------------------------------------------------------------------
 

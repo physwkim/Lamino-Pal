@@ -6,7 +6,6 @@ Every write goes through `Project.commit`.
 
 from __future__ import annotations
 
-import fcntl
 import os
 import tomllib
 from contextlib import contextmanager
@@ -16,7 +15,7 @@ from typing import Annotated, Any, Callable, Iterator, Literal
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from lamino_pal import Refused
+from lamino_pal import Refused, locks
 
 
 class _Model(BaseModel):
@@ -117,7 +116,10 @@ def is_under(path: Path, root: Path) -> bool:
 class Project:
     def __init__(self, path: str | os.PathLike[str]):
         self.path = Path(path).resolve()
-        self.data = self._read()
+        if not self.path.is_file():
+            # Before its lock file is made beside it.
+            raise FileNotFoundError(f"no project file {self.path}")
+        self.reload()
 
     @classmethod
     def create(cls, path: str | os.PathLike[str], raw_root: str) -> Project:
@@ -143,7 +145,9 @@ class Project:
         return self.data.project.revision
 
     def reload(self) -> ProjectFile:
-        self.data = self._read()
+        # Under the lock: Windows refuses to replace a file another handle has open.
+        with self._lock():
+            self.data = self._read()
         return self.data
 
     def commit(self, mutation: Callable[[ProjectFile], None]) -> ProjectFile:
@@ -168,8 +172,7 @@ class Project:
     @contextmanager
     def _lock(self) -> Iterator[None]:
         # A side file: the atomic rename replaces project.toml's inode.
-        with open(self.path.with_name(self.path.name + ".lock"), "w") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
+        with locks.locked(self.path.with_name(self.path.name + ".lock")):
             yield
 
 
@@ -180,6 +183,9 @@ def _write(path: Path, data: ProjectFile) -> None:
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
+    # Windows opens no directory to fsync.
+    if not hasattr(os, "O_DIRECTORY"):
+        return
     dfd = os.open(path.parent, os.O_DIRECTORY)
     try:
         os.fsync(dfd)

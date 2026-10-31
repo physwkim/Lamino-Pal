@@ -108,7 +108,7 @@ def _figure(project: Project, name: str, op: str, result: dict[str, Any], arrays
     if fig is None:
         return None
     png, caption = fig
-    return {"path": str(figures.save(project.work_dir, name, png)), "caption": caption}, png
+    return {"path": figures.save(project.work_dir, name, png), "caption": caption}, png
 
 
 def _reply(result: dict[str, Any], figure: Figure | None) -> CallToolResult:

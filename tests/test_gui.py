@@ -8,10 +8,15 @@ import os
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 # Else offscreen draws through DISPLAY's GLX when it has one.
 os.environ["QT_QPA_OFFSCREEN_NO_GLX"] = "1"
+# Windows's offscreen reads fonts from Qt's own folder only, which pip's
+# PySide6 leaves empty; with no font, a glyph run's font has no family.
+if os.name == "nt":
+    os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ["SystemRoot"], "Fonts"))
 os.environ["QT_API"] = "pyside6"
 
 import re
 import subprocess
+import sys
 import threading
 import time
 import warnings
@@ -27,9 +32,11 @@ from napari._vispy.utils.visual import create_vispy_overlay
 from napari.layers import Image
 from PIL import Image as PILImage
 from silx.gui import qt
+from silx.gui.plot import Plot1D
 from silx.gui.plot.items import MarkerBase, Shape
 from test_recon import _scan
 from vispy.app.canvas import MouseEvent
+from vispy.gloo.gl import _gl2
 
 from lamino_pal import LaminoPalError, _core, dispatch, jobs, remote
 from lamino_pal.artifacts import save_h5
@@ -42,10 +49,21 @@ from lamino_pal.gui.tabs.export import MIPS
 from lamino_pal.gui.tree import _key
 from lamino_pal.gui.viewer import Viewer
 from lamino_pal.jobs import JobState
-from lamino_pal.ops import REGISTRY
+from lamino_pal.ops import REGISTRY, volume
 from lamino_pal.ops.align import Rival, SweepResult, Verdict
+from lamino_pal.ops.raw import RangeResult, TiltFlowResult
 from lamino_pal.ops.volume import FocusResult
 from lamino_pal.render import to_u8, window
+
+
+def _no_gl(name, restype, argtypes):
+    # What Linux's libGL does called with no context: nothing, 0 or NULL
+    # back. A Mac's crashes and vispy's Windows loader raises.
+    value = restype().value if restype else None
+    return lambda *args: value
+
+
+_gl2._get_gl_func = _no_gl
 
 
 @pytest.fixture(scope="module")
@@ -269,6 +287,18 @@ def test_status_names_how_each_field_was_decided_and_the_next_tab(scene):
     assert status.status(scene, scene.data.group[0]).next_tab == "Align"
 
 
+def test_a_measured_angle_that_rounds_to_zero_reads_unsigned(win):
+    tab = win.tabs["Raw"]
+    turn = dict(nproj=801, last_deg=360.0, step_deg=0.45, step_spread_deg=0.0, kind="full", turn_index=800)
+    tab._range(RangeResult(first_deg=-0.001, warnings=[], **turn))
+    tab._flow(TiltFlowResult(
+        tilt_deg=19.999, tilt_sigma_deg=0.1, roll_deg=-0.001, roll_sigma_deg=0.1,
+        axis_px=1009.0, axis_sigma_px=1.0, pairs=[], group_tilt_deg=None,
+    ))
+    assert "0.00° to 360.00°" in tab.range.text() and "roll 0.00°" in tab.flow_out.text()
+    assert "-0.00" not in tab.range.text() + tab.flow_out.text()
+
+
 def test_an_instant_op_shows_its_figure_and_a_job_its_end(app, win):
     win.set_context(tag="s", volume="v.h5")
     dialog = RunOpDialog(win, "volume.slice")
@@ -284,6 +314,8 @@ def test_an_instant_op_shows_its_figure_and_a_job_its_end(app, win):
     assert ended[0].id == st.id and ended[0].status == "done"
     rows = [win.jobs.table.item(r, 0).text() for r in range(win.jobs.table.rowCount())]
     assert st.id in rows
+    t = win.jobs.table
+    assert t.columnWidth(0) >= t.sizeHintForColumn(0) > t.horizontalHeader().defaultSectionSize()
     dialog.close()
 
 
@@ -314,6 +346,7 @@ def test_a_job_resubmitted_on_a_done_jobs_params_shows_that_job_until_its_input_
     dialog.close()
 
 
+@pytest.mark.gpu
 def test_a_batch_row_whose_final_exists_reads_so_and_a_rerun_shows_the_job_that_made_it(app, win):
     old = time.time() - 60
     for f in win.project.work_dir.rglob("*"):
@@ -345,13 +378,13 @@ def test_a_batch_row_whose_final_a_job_is_writing_reads_that_jobs_status(app, wi
     assert tab.table.item(0, 6).text() == "to make"
     out = dispatch.resolve(REGISTRY["recon.run"], {"tag": "s"}, win.project).out
     # The agent's job, which this window did not submit.
-    sleeper = subprocess.Popen(["sleep", "60"])
+    d = jobs.jobs_dir(win.project) / "j"
+    sleeper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", str(d)])
     try:
-        d = jobs.jobs_dir(win.project) / "j"
         d.mkdir(parents=True)
         st = JobState(
             id="j", project=str(win.project.path), op="recon.run", params={"tag": "s", "out": out}, caller="mcp",
-            gpu=0, status="running", created="", pid=sleeper.pid, proc_start=jobs._proc_start(sleeper.pid),
+            gpu=0, status="running", created="", pid=sleeper.pid,
         )
         jobs._write(d, st)
         assert pump(app, 3, lambda: tab.table.item(0, 6).text() == "running")
@@ -486,6 +519,17 @@ def test_every_graph_names_its_axes_before_its_first_result(win):
             assert g.getXAxis().getLabel() != "X" and g.getYAxis().getLabel() != "Y", name
 
 
+def test_a_curve_s_peaks_and_ends_sit_inside_its_graph_s_frame(win):
+    """On the frame, a peak or an end point is hidden under it."""
+    curves = [p for tab in win.tabs.values() for p in tab.graphs.values() if isinstance(p, Plot1D)]
+    assert len(curves) == 4
+    for p in curves:
+        p.addCurve([0, 1], [0, 1], legend="c")
+        (x0, x1), (y0, y1) = p.getXAxis().getLimits(), p.getYAxis().getLimits()
+        assert x0 < 0 < 1 < x1 and y0 < 0 < 1 < y1, p.getXAxis().getLabel()
+        p.clear()
+
+
 def test_a_graph_at_its_least_size_wraps_its_title_and_keeps_a_plot(app, win):
     from lamino_pal.gui.tabs.align import PICKED, TILT_FOCUS
     from lamino_pal.gui.tabs.base import GRAPH_SIZE, PLOT_LEAST
@@ -583,6 +627,7 @@ def test_a_tilt_scan_shows_each_tilts_xz_plane_over_its_depth_under_its_slice(ap
     assert at.plot._getMarker("picked").getXPosition() == 21
 
 
+@pytest.mark.gpu
 def test_a_preview_is_made_again_only_as_its_inputs_change_and_a_compare_shown_stays(app, win, monkeypatch):
     pt = win.tabs["Preview"]
     previews = []
@@ -615,22 +660,33 @@ def test_a_preview_is_made_again_only_as_its_inputs_change_and_a_compare_shown_s
     win.show_tab("Raw")
     win.show_tab("Preview")
     pump(app, 0.2)
-    win._select("artifact", os.path.relpath(ended[0].result["artifacts"][0], win.project.work_dir))
+    win._select("artifact", "artifacts/" + os.path.basename(ended[0].result["artifacts"][0]))
     pump(app, 0.2)
     assert len(previews) == 4
     assert not pt.cnr.isHidden() and "variant slice" in names(pt.view)
 
 
-def test_a_graph_draws_its_hangul_title_in_a_font_that_has_it(app, scene, monkeypatch):
-    from lamino_pal.gui.tabs.align import TILT_FOCUS
+def test_a_graph_saved_to_a_file_is_drawn_without_its_on_screen_hold(app, win, monkeypatch):
+    plot = win.tabs["Align"].plot
+    # Else matplotlib prints a callback's error and goes on.
+    monkeypatch.setattr(plot.getBackend().fig.canvas.callbacks, "exception_handler", None)
+    plot.saveGraph(io.BytesIO(), fileFormat="png")
+
+
+@pytest.mark.parametrize("unlisted", [False, True], ids=["drawn", "listed for Korean"])
+def test_a_graph_draws_its_hangul_title_in_a_font_that_has_it(app, scene, monkeypatch, unlisted):
     from lamino_pal.gui.window import MainWindow
 
     if not qt.QFontDatabase.families(qt.QFontDatabase.WritingSystem.Korean):
         pytest.skip("no font here has Hangul")
     monkeypatch.setitem(matplotlib.rcParams, "font.family", ["sans-serif"])
+    if unlisted:
+        # Qt draws it with a font matplotlib does not list.
+        monkeypatch.setattr(qt.QRawFont, "familyName", lambda self: ".Unlisted")
     w = MainWindow(scene)
     plot = w.tabs["Align"].plot
-    plot.setGraphTitle(TILT_FOCUS)
+    # BL7C's folders: "360도 step".
+    plot.setGraphTitle("360도 step/Step_N1000_0p18s")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         plot.saveGraph(io.BytesIO(), fileFormat="png")
@@ -667,6 +723,18 @@ def test_the_volume_planes_follow_one_slider_once_and_3d_shows_the_binned_volume
         vt.view3d.model.dims.ndisplay = n
         pump(app, 0.1)
         assert vt.view3d.model.dims.ndisplay == n
+
+
+def test_the_volume_planes_of_an_unheld_volume_leave_its_file_replaceable(app, win, monkeypatch):
+    monkeypatch.setattr(volume, "HOLD", False)
+    win._select("volume", "v.h5")
+    vt = win.tabs["Volume"]
+    assert pump(app, 20, lambda: vt._fov is not None)
+    assert all(type(v.model.layers["v.h5"].data) is np.ndarray for v in vt.views.values())
+    path = win.project.work_dir / "v.h5"
+    part = path.with_name("v.part.h5")
+    part.write_bytes(path.read_bytes())
+    os.replace(part, path)
 
 
 def test_the_3d_window_is_that_of_what_its_rendering_draws(app, win):
@@ -748,6 +816,11 @@ def test_an_export_job_leaves_the_header_naming_the_volume(app, win):
     assert [p.getGraphTitle() for p in ex.mips.values()] == [f"MIP {t}" for _, t in MIPS]
 
 
+def test_the_volume_header_reads_its_provenance_in_units(win):
+    win._select("volume", "v.h5")
+    assert win.tabs["Volume"].info.text().endswith("; tag s, bin 2, center 64.50 px, tilt 20°")
+
+
 def test_the_volume_tab_shows_the_band_carried_to_the_volumes_tilt(app, win):
     (win.project.work_dir / "fig.png").write_bytes(b"")
     d20, d30 = _core.lamino_depth(32, 20.0), _core.lamino_depth(32, 30.0)
@@ -762,6 +835,12 @@ def test_the_volume_tab_shows_the_band_carried_to_the_volumes_tilt(app, win):
     win._select("volume", "w.h5")
     vt = win.tabs["Volume"]
     assert (vt.z0.value(), vt.z1.value()) == (lo, hi)
+    # Read at bin 2, the band is not carried to bin 4: every slice, not w.h5's.
+    with h5py.File(win.project.work_dir / "b.h5", "w") as f:
+        f["exchange/data"] = np.random.default_rng(0).random((d30 // 2, 4, 4), dtype="f4")
+        f.require_group("lamino_pal/provenance").attrs.update(tag="s", center_px=64.5, tilt_deg=30.0, bin=4)
+    win._select("volume", "b.h5")
+    assert lo > 0 and (vt.z0.value(), vt.z1.value()) == (0, d30 // 2 - 1)
 
 
 def test_the_focus_curve_shades_the_band_air_and_z_wrap(app, win):
@@ -1011,12 +1090,20 @@ def docks(v):
     return [d.isVisible() for d in (v.qt_viewer.dockLayerControls, v.qt_viewer.dockLayerList)]
 
 
+def fitted(app, win):
+    """Events until the window has fitted its right column and laid it out:
+    a viewer's first show makes its canvas, which with the events after it
+    can outlast a fixed wait."""
+    assert pump(app, 5, until=lambda: not win._fit.isActive())
+    pump(app, 0.2)
+
+
 def test_a_viewers_docks_leave_the_window_its_size(app, win):
     win.resize(1600, 1000)
     pump(app, 0.2)
     for name in ("Raw", "Align", "Preview", "Volume", "Batch"):
         win.show_tab(name)
-        pump(app, 0.2)
+        fitted(app, win)
         assert (win.width(), win.height()) == (1600, 1000), name
 
 
@@ -1076,7 +1163,7 @@ def test_the_right_columns_docks_show_their_contents_whole_and_the_layer_list_th
     win.tabs["Raw"].view.replace("img", np.zeros((8, 8), "f4"))
     for name in ("Raw", "Align", "Preview", "Volume", "Raw"):
         win.show_tab(name)
-        pump(app, 0.3)
+        fitted(app, win)
         assert win.stackParams.currentWidget().verticalScrollBar().maximum() == 0, name
     qv = win.tabs["Raw"].view.qt_viewer
     assert qv.dockLayerControls.widget().verticalScrollBar().maximum() == 0
@@ -1100,3 +1187,28 @@ def test_a_viewer_makes_its_canvas_when_first_shown_and_shows_its_docks_while_it
     vt.pages.setCurrentIndex(0)
     pump(app, 0.2)
     assert docks(vt.view3d) == [False, False] and docks(vt.views["z"]) == [True, True]
+
+
+def test_naparis_buttons_act_on_the_viewer_whose_layer_list_shows(app, win, monkeypatch):
+    from napari.layers.shapes._shapes_constants import Mode
+
+    raised = []
+    monkeypatch.setattr(sys, "excepthook", lambda t, e, tb: raised.append(e))
+    vt, pt = win.tabs["Volume"], win.tabs["Preview"]
+    win._select("volume", "v.h5")
+    win.show_tab("Volume")
+    pump(app, 0.2)
+    # The z slice's: the xz and yz views have no layer list.
+    vt.views["z"].qt_viewer.viewerButtons.gridViewButton.click()
+    assert vt.views["z"].model.grid.enabled and not vt.views["y"].model.grid.enabled
+    win.show_tab("Preview")
+    pump(app, 0.2)
+    pt._roi_layer()
+    qv = pt.view.qt_viewer
+    roi = pt.view.model.layers["ROI"]
+    # A layer's, on the active layer.
+    qv.controls.widgets[roi]._MODE_BUTTONS[Mode.SELECT].click()
+    assert roi.mode == "select"
+    qv.layerButtons.deleteButton.click()
+    assert "ROI" not in pt.view.model.layers
+    assert raised == [] and qv.viewerButtons.consoleButton.isHidden()
