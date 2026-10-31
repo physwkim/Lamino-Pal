@@ -8,8 +8,10 @@ Design: [docs/DESIGN.md](docs/DESIGN.md). GUI manual (Korean):
 
 ## Install
 
-Linux with an NVIDIA GPU and the CUDA toolkit (`nvcc` on `PATH`), a Rust
-toolchain, and micromamba:
+A Rust toolchain and micromamba on Linux, Windows or macOS. Reconstruction
+and alignment (`recon.*`, `align.center_sweep`, `align.tilt_scan`,
+`align.center_compare`) run on an NVIDIA GPU and need the CUDA toolkit
+(`nvcc` on `PATH`); that build is tested on Linux only.
 
 ```sh
 "${SHELL}" <(curl -L micro.mamba.pm/install.sh)                  # micromamba; reopen the shell
@@ -19,6 +21,20 @@ git clone --recurse-submodules https://github.com/physwkim/Lamino-Pal.git
 cd Lamino-Pal
 micromamba create -f env.yaml
 micromamba run -n lamino-pal maturin develop --release   # features: pyproject.toml
+```
+
+Without CUDA (macOS, or no `nvcc`), build the core without it instead; every
+other op runs, and the GPU ops are refused:
+
+```sh
+micromamba run -n lamino-pal maturin develop --release -F pyo3/extension-module
+```
+
+On Windows, Rust comes from `rustup-init.exe` at <https://rustup.rs>, and
+micromamba from PowerShell; the rest is as above:
+
+```powershell
+Invoke-Expression ((Invoke-WebRequest -Uri https://micro.mamba.pm/install.ps1 -UseBasicParsing).Content)
 ```
 
 `maturin develop` installs the package editable into the `lamino-pal`
