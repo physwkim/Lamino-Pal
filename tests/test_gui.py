@@ -1078,12 +1078,20 @@ def docks(v):
     return [d.isVisible() for d in (v.qt_viewer.dockLayerControls, v.qt_viewer.dockLayerList)]
 
 
+def fitted(app, win):
+    """Events until the window has fitted its right column and laid it out:
+    a viewer's first show makes its canvas, which with the events after it
+    can outlast a fixed wait."""
+    assert pump(app, 5, until=lambda: not win._fit.isActive())
+    pump(app, 0.2)
+
+
 def test_a_viewers_docks_leave_the_window_its_size(app, win):
     win.resize(1600, 1000)
     pump(app, 0.2)
     for name in ("Raw", "Align", "Preview", "Volume", "Batch"):
         win.show_tab(name)
-        pump(app, 0.2)
+        fitted(app, win)
         assert (win.width(), win.height()) == (1600, 1000), name
 
 
@@ -1143,7 +1151,7 @@ def test_the_right_columns_docks_show_their_contents_whole_and_the_layer_list_th
     win.tabs["Raw"].view.replace("img", np.zeros((8, 8), "f4"))
     for name in ("Raw", "Align", "Preview", "Volume", "Raw"):
         win.show_tab(name)
-        pump(app, 0.3)
+        fitted(app, win)
         assert win.stackParams.currentWidget().verticalScrollBar().maximum() == 0, name
     qv = win.tabs["Raw"].view.qt_viewer
     assert qv.dockLayerControls.widget().verticalScrollBar().maximum() == 0
