@@ -37,14 +37,16 @@ def _relaunch(path: Path) -> None:
 def _hangul_in_graphs() -> None:
     """matplotlib, which draws the graphs, takes one font for its generic
     sans-serif, DejaVu Sans, with no Hangul; a glyph falls back only to the
-    later families of its list, so list the ones Qt draws Hangul with."""
+    later families of its list, so list one Qt draws Hangul with, else one it
+    lists for Korean: on the macOS runner matplotlib knew none Qt drew with."""
     lay = qt.QTextLayout("한", qt.QApplication.font())
     lay.beginLayout()
     lay.createLine()
     lay.endLayout()
-    fams = [r.rawFont().familyName() for r in lay.glyphRuns()]
+    drawn = [r.rawFont().familyName() for r in lay.glyphRuns()]
+    korean = qt.QFontDatabase.families(qt.QFontDatabase.WritingSystem.Korean)
     known = {f.name for f in font_manager.fontManager.ttflist}
-    rcParams["font.family"] = ["sans-serif", *(f for f in fams if f in known)]
+    rcParams["font.family"] = ["sans-serif", *[f for f in [*drawn, *korean] if f in known][:1]]
 
 
 class _Scroll(qt.QScrollArea):

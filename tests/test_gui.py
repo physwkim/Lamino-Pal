@@ -673,12 +673,16 @@ def test_a_graph_saved_to_a_file_is_drawn_without_its_on_screen_hold(app, win, m
     plot.saveGraph(io.BytesIO(), fileFormat="png")
 
 
-def test_a_graph_draws_its_hangul_title_in_a_font_that_has_it(app, scene, monkeypatch):
+@pytest.mark.parametrize("unlisted", [False, True], ids=["drawn", "listed for Korean"])
+def test_a_graph_draws_its_hangul_title_in_a_font_that_has_it(app, scene, monkeypatch, unlisted):
     from lamino_pal.gui.window import MainWindow
 
     if not qt.QFontDatabase.families(qt.QFontDatabase.WritingSystem.Korean):
         pytest.skip("no font here has Hangul")
     monkeypatch.setitem(matplotlib.rcParams, "font.family", ["sans-serif"])
+    if unlisted:
+        # Qt draws it with a font matplotlib does not list.
+        monkeypatch.setattr(qt.QRawFont, "familyName", lambda self: ".Unlisted")
     w = MainWindow(scene)
     plot = w.tabs["Align"].plot
     # BL7C's folders: "360도 step".
