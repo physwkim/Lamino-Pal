@@ -8,7 +8,6 @@ sets the scan, its geometry and the output itself.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import shutil
@@ -24,7 +23,7 @@ import tomli_w
 from pydantic import AfterValidator, BaseModel, Field, model_validator
 
 import lamino_pal
-from lamino_pal import LaminoPalError, Refused, _core, scans, units
+from lamino_pal import LaminoPalError, Refused, _core, locks, scans, units
 from lamino_pal.artifacts import save_h5, scratch, written
 from lamino_pal.dispatch import Context
 from lamino_pal.ops.align import _decided_center, _digest, _slice, _stem, _tilt
@@ -408,8 +407,7 @@ def tomoxide_cli() -> Path:
         raise Refused(f"the core was built from tomoxide {_core.tomoxide_rev()}, {tox} is at {rev}: rebuild the core")
     exe.parent.mkdir(parents=True, exist_ok=True)
     # Jobs that start together build it once.
-    with open(exe.parent / ".build.lock", "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with locks.locked(exe.parent / ".build.lock"):
         if not exe.is_file():
             with written(exe) as part:
                 shutil.copy2(_cargo_build(tox), part)

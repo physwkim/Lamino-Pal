@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Iterator, Literal
 
 import h5py
 from pydantic import BaseModel, Field
 
-from lamino_pal import Refused, _core
+from lamino_pal import Refused, _core, locks
 from lamino_pal.artifacts import written
 from lamino_pal.dispatch import Context
 from lamino_pal.ops.registry import InPath, OptOutPath, OutputParams, Params, Result, op
@@ -81,9 +80,9 @@ def _relative(ctx: Context, path: str) -> str:
 def _import_lock(ctx: Context, raw: str) -> Iterator[None]:
     """One import per project at a time, from its checks through its commit:
     an import's output path and tag cannot change hands while it runs."""
-    with open(ctx.project.work_dir / ".import.lock", "w") as f:
+    with ExitStack() as held:
         with ctx.waiting("another import", f"importing {raw}"):
-            fcntl.flock(f, fcntl.LOCK_EX)
+            held.enter_context(locks.locked(ctx.project.work_dir / ".import.lock"))
         yield
 
 

@@ -6,7 +6,6 @@ Every write goes through `Project.commit`.
 
 from __future__ import annotations
 
-import fcntl
 import os
 import tomllib
 from contextlib import contextmanager
@@ -16,7 +15,7 @@ from typing import Annotated, Any, Callable, Iterator, Literal
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from lamino_pal import Refused
+from lamino_pal import Refused, locks
 
 
 class _Model(BaseModel):
@@ -168,8 +167,7 @@ class Project:
     @contextmanager
     def _lock(self) -> Iterator[None]:
         # A side file: the atomic rename replaces project.toml's inode.
-        with open(self.path.with_name(self.path.name + ".lock"), "w") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
+        with locks.locked(self.path.with_name(self.path.name + ".lock")):
             yield
 
 

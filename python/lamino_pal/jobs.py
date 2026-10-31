@@ -9,7 +9,6 @@ environment it starts with.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import secrets
@@ -27,7 +26,7 @@ from typing import Any, Iterator, Literal
 
 from pydantic import BaseModel, ValidationError
 
-from lamino_pal import LaminoPalError, Refused, _core, artifacts, dispatch
+from lamino_pal import LaminoPalError, Refused, _core, artifacts, dispatch, locks
 from lamino_pal.dispatch import Caller
 from lamino_pal.ops.registry import REGISTRY, _In, _Out
 from lamino_pal.project import Project
@@ -83,8 +82,7 @@ def submit(project: Project, name: str, params: dict[str, Any], caller: Caller) 
         jobs_dir(project).mkdir(parents=True, exist_ok=True)
         # GUI and MCP submit concurrently: the checks and the queued state go
         # down under one lock, so the next submitter counts this job.
-        with open(jobs_dir(project) / "submit.lock", "a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+        with locks.locked(jobs_dir(project) / "submit.lock"):
             # Each job checks its outputs when it starts; two queued at once
             # would both pass and the second overwrite the first.
             outs = {getattr(p, k) for k in op.path_fields(_Out)}
@@ -338,8 +336,7 @@ def _now() -> str:
 
 @contextmanager
 def _lock(d: Path) -> Iterator[None]:
-    with open(d / "state.lock", "a") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+    with locks.locked(d / "state.lock"):
         yield
 
 

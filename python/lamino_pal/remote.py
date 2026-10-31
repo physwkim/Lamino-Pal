@@ -5,16 +5,16 @@ false, "error"}`."""
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import socket
 import socketserver
 import threading
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Callable
 
-from lamino_pal import LaminoPalError
+from lamino_pal import LaminoPalError, locks
 from lamino_pal.dispatch import runtime_dir
 
 # How long the GUI waits for its Qt thread; a caller waits a little longer, to
@@ -46,11 +46,9 @@ class Server:
     def __init__(self, project: Path, handle: Callable[[str, dict[str, Any]], Any]):
         self._sock, lock = _paths(project)
         self._server: _UnixServer | None = None
-        self._lock = open(lock, "a+")
-        try:
-            fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            self._lock.close()
+        self._held = ExitStack()
+        if self._held.enter_context(locks.locked(lock, wait_s=0)) is None:
+            self._held.close()
             return
 
         class Handler(socketserver.StreamRequestHandler):
@@ -79,7 +77,7 @@ class Server:
         self._server.server_close()
         # While the lock is held: once it goes, the socket is the next GUI's.
         self._sock.unlink(missing_ok=True)
-        self._lock.close()
+        self._held.close()
         self._server = None
 
 
