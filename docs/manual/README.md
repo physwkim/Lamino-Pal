@@ -257,6 +257,11 @@ digest라서, ROI·z·후보를 바꿔 다시 돌리면 앞 결과를 덮지 않
    disk on slices 184-906 (the cyan lines)`). 청록 원과 선이 그 범위다. z band가
    미정이면 first/last slice는 volume 전체(0–1089)다.
 
+   Windows에서는 volume을 열 때 파일 전체를 메모리로 읽는다(4.3 GiB에 수 초).
+   Windows는 프로세스가 열거나 매핑한 파일을 교체하지 못하므로, 보는 동안에도
+   job이 그 파일을 덮어쓸 수 있게 파일을 잡아 두지 않는 것이다. 그래서 거기서는
+   메모리에 들어가는 volume만 열 수 있다.
+
    ![volume](23-volume.png)
 
 2. 한 단면을 더블클릭하면 십자가 그 점으로 옮겨지고 다른 두 단면이 따라간다.
