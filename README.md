@@ -11,7 +11,8 @@ Design: [docs/DESIGN.md](docs/DESIGN.md). GUI manual (Korean):
 A Rust toolchain and micromamba on Linux, Windows or macOS. Reconstruction
 and alignment (`recon.*`, `align.center_sweep`, `align.tilt_scan`,
 `align.center_compare`) run on an NVIDIA GPU and need the CUDA toolkit
-(`nvcc` on `PATH`); that build is tested on Linux only.
+(`nvcc` on `PATH`); that build runs its tests on Linux, and on Windows is only
+built.
 
 ```sh
 "${SHELL}" <(curl -L micro.mamba.pm/install.sh)                  # micromamba; reopen the shell
@@ -36,6 +37,10 @@ micromamba from PowerShell; the rest is as above:
 ```powershell
 Invoke-Expression ((Invoke-WebRequest -Uri https://micro.mamba.pm/install.ps1 -UseBasicParsing).Content)
 ```
+
+With CUDA, nvcc compiles through Visual Studio's `cl.exe`, which is on `PATH`
+only in the "x64 Native Tools Command Prompt for VS 2022": build there, and
+start the GUI there for the first `recon.run`, which builds the tomoxide CLI.
 
 `maturin develop` installs the package editable into the `lamino-pal`
 environment with the commands `lamino-pal-gui`, `lamino-pal-mcp` and

@@ -1,8 +1,8 @@
 name: CI
 
-# No runner has a GPU or nvcc: the core is built without `cuda`, the tests
-# marked gpu are left out, and the cuda build is type-checked only. Neither
-# has a runner the 261003 data the golden tests read.
+# No runner has a GPU: the core is built without `cuda`, the tests marked gpu
+# are left out, and the cuda build is type-checked on Linux and built on
+# Windows. Neither has a runner the 261003 data the golden tests read.
 
 # A pull request's branch runs once, as the pull request.
 on:
@@ -49,6 +49,43 @@ jobs:
         with:
           key: cuda
       - run: cargo clippy --all-targets --features cuda -- -D warnings
+
+  # The cuda core and CLI as a Windows user builds them, each importing or
+  # building without a GPU. pwsh, not bash: Git's /usr/bin/link would stand in
+  # for MSVC's. One arch keeps nvcc short; windows-2022 because nvcc refuses an
+  # MSVC newer than its release knows.
+  cuda-windows:
+    name: cuda build (windows)
+    runs-on: windows-2022
+    env:
+      TOMOXIDE_CUDA_ARCH: "75"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - uses: Jimver/cuda-toolkit@v0.2.36
+        with:
+          cuda: "13.0.2"
+          method: network
+          sub-packages: '["nvcc", "nvvm", "crt", "cudart", "cufft", "cufft_dev"]'
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: cuda-windows
+          workspaces: |
+            .
+            lib/tomoxide
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: env.yaml
+          cache-environment: true
+      - name: build the core
+        run: micromamba run -n lamino-pal maturin develop --release
+      - name: import it
+        run: micromamba run -n lamino-pal python -c "from lamino_pal import _core; assert _core.cuda_enabled()"
+      - name: build the CLI as recon.run does
+        run: micromamba run -n lamino-pal python -c "from lamino_pal.ops import recon; print(recon.tomoxide_cli())"
 
   test:
     name: test (${{ matrix.os }})
