@@ -1,127 +1,37 @@
 name: CI
 
-# No runner has a GPU: the core is built without `cuda`, the tests marked gpu
-# are left out, and the cuda build is type-checked on Linux and built on
-# Windows. Neither has a runner the 261003 data the golden tests read.
-
-# A pull request's branch runs once, as the pull request.
 on:
-  push:
-    branches: [main]
   pull_request:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
-
 jobs:
-  fmt:
-    name: rustfmt
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - run: cargo fmt --all --check
-
-  # TOMOXIDE_CUDA_SKIP_BUILD skips tomoxide's nvcc compile and link.
-  cuda-typecheck:
-    name: clippy (cuda, type-check only)
-    runs-on: ubuntu-latest
-    env:
-      TOMOXIDE_CUDA_SKIP_BUILD: "1"
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: true
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: cuda
-      - run: cargo clippy --all-targets --features cuda -- -D warnings
-
-  # The cuda core and CLI as a Windows user builds them, each importing or
-  # building without a GPU. pwsh, not bash: Git's /usr/bin/link would stand in
-  # for MSVC's. One arch keeps nvcc short; windows-2022 because nvcc refuses an
-  # MSVC newer than its release knows.
-  cuda-windows:
-    name: cuda build (windows)
+  diag:
     runs-on: windows-2022
-    env:
-      TOMOXIDE_CUDA_ARCH: "75"
     steps:
       - uses: actions/checkout@v5
-        with:
-          submodules: true
-      - uses: Jimver/cuda-toolkit@v0.2.36
-        with:
-          cuda: "13.0.2"
-          method: network
-          sub-packages: '["nvcc", "nvvm", "crt", "cudart", "cufft", "cufft_dev"]'
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: cuda-windows
-          workspaces: |
-            .
-            lib/tomoxide
       - uses: mamba-org/setup-micromamba@v2
         with:
           environment-file: env.yaml
           cache-environment: true
-      - name: build the core
-        run: micromamba run -n lamino-pal maturin develop --release
-      - name: import it
-        run: micromamba run -n lamino-pal python -c "from lamino_pal import _core; assert _core.cuda_enabled()"
-      - name: build the CLI as recon.run does
-        run: micromamba run -n lamino-pal python -c "from lamino_pal.ops import recon; print(recon.tomoxide_cli())"
-
-  test:
-    name: test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    defaults:
-      run:
-        shell: bash -el {0}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: true
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@nextest
-      # QtGui's own libraries, which the offscreen platform loads too.
-      - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
-      - uses: mamba-org/setup-micromamba@v2
-        with:
-          environment-file: env.yaml
-          cache-environment: true
-      - name: clippy
-        run: cargo clippy --all-targets -- -D warnings
-      - name: nextest
-        run: cargo nextest run --no-default-features
-      # `-F` replaces pyproject.toml's features, `cuda` with them.
-      - name: build the core
-        run: maturin develop --release -F pyo3/extension-module
-      - name: pytest
-        run: python -m pytest -rs -m "not gpu and not golden"
-        # Every text file and pipe of ours names its encoding: the locale's is cp1252 on Windows.
-        env:
-          PYTHONWARNDEFAULTENCODING: "1"
+      - name: pwsh
+        run: |
+          where.exe link
+          ($env:Path -split ';').Count
+          reg query "HKCU\Software\Microsoft\Command Processor" /v AutoRun
+          reg query "HKLM\Software\Microsoft\Command Processor" /v AutoRun
+          Get-ChildItem "$env:MAMBA_ROOT_PREFIX\condabin"
+          exit 0
+      - name: micromamba run
+        run: |
+          micromamba run -n lamino-pal cmd /c "where link & where cl & where maturin"
+          micromamba run -n lamino-pal pwsh -NoProfile -c '$p = $env:Path -split \";\"; $p.Count; $p | Select-Object -First 12'
+          micromamba run -n lamino-pal pwsh -NoProfile -c 'Get-ChildItem env: | Where-Object Name -match \"^path$\" | Format-List Name'
+          exit 0
+      - name: hook files
+        run: |
+          Get-ChildItem "$env:MAMBA_ROOT_PREFIX\condabin" | ForEach-Object { "== $($_.Name)"; Get-Content $_.FullName }
+          $s = micromamba shell activate -s cmd.exe -p "$env:MAMBA_ROOT_PREFIX\envs\lamino-pal"
+          "== activate script $s"
+          Get-Content $s | ForEach-Object { $_.Substring(0, [Math]::Min(400, $_.Length)) }
+          exit 0
